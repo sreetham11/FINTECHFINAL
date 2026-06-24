@@ -7,6 +7,7 @@ const navItems = [
   { href: '/', label: 'Home', icon: 'home' },
   { href: '/memories', label: 'Memories', icon: 'memories' },
   { href: '/vault', label: 'Vault', icon: 'vault' },
+  { href: '/scanner', label: 'Scan', icon: 'scanner' },
   { href: '/personality', label: 'Me', icon: 'personality' },
   { href: '/overseas', label: 'Overseas', icon: 'overseas' },
 ];
@@ -42,6 +43,14 @@ const NavIcon = ({ type, active }: { type: string; active: boolean }) => {
         <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke={color}>
           <circle cx="12" cy="8" r="4" />
           <path d="M4 20c0-4 4-7 8-7s8 3 8 7" />
+        </svg>
+      );
+    case 'scanner':
+      return (
+        <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke={color}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 12h18" strokeDasharray="4 4" />
+          <path d="M12 8v8" />
         </svg>
       );
     case 'overseas':

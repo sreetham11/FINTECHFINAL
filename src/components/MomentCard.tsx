@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Transaction } from '@/data/transactions';
 import { getFriendsByIds } from '@/data/friends';
 import { formatCurrency, formatDate, formatTime, getRandomRotation, getCategoryColor } from '@/lib/utils';
+import Typewriter from '@/components/Typewriter';
 
 interface MomentCardProps {
   variant?: "default" | "red";
@@ -110,7 +111,7 @@ export default function MomentCard({ transaction, index, showRotation = true, va
       )}
 
       <div className="moment-memory-line">
-        &ldquo;{transaction.memoryLine}&rdquo;
+        &ldquo;<Typewriter text={transaction.memoryLine} />&rdquo;
       </div>
 
       {expanded && (

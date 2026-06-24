@@ -1,17 +1,48 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { t } from '@/data/translations';
 import Link from 'next/link';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, ZAxis } from 'recharts';
+import Typewriter from '@/components/Typewriter';
 
 export default function PersonalityPage() {
   const [isSharing, setIsSharing] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   
-  const { personality, categories, peakTime, moodPattern, language, simulatedTransactions } = useApp();
+  const { personality, categories, peakTime, moodPattern, language, simulatedTransactions, allTransactions } = useApp();
   
   const txnCount = simulatedTransactions?.length || 0;
+
+  // Heatmap Data Prep
+  const heatmapData = useMemo(() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const times = ['Morning', 'Afternoon', 'Evening', 'Night'];
+    const grid: any[] = [];
+    days.forEach((day, x) => {
+      times.forEach((time, y) => {
+        grid.push({ x, y, day, time, value: 0 });
+      });
+    });
+
+    allTransactions.forEach(t => {
+      const d = new Date(t.date);
+      const dayIdx = d.getDay();
+      const hour = parseInt(t.time.split(':')[0]);
+      let timeIdx = 0;
+      if (hour >= 6 && hour < 12) timeIdx = 0;
+      else if (hour >= 12 && hour < 17) timeIdx = 1;
+      else if (hour >= 17 && hour < 21) timeIdx = 2;
+      else timeIdx = 3;
+
+      const cell = grid.find(g => g.x === dayIdx && g.y === timeIdx);
+      if (cell) cell.value += 1;
+    });
+
+    return grid.filter(g => g.value > 0);
+  }, [allTransactions]);
   const isTitleStoryLocked = txnCount < 10;
   const isTraitsLocked = txnCount < 5;
 
@@ -108,7 +139,10 @@ export default function PersonalityPage() {
             {/* Personality Title */}
             <div className={`personality-title ${isTitleStoryLocked ? 'blur-locked' : ''}`} style={{ marginTop: '12px' }}>
               {personality.isLoading ? (
-                <span className="text-muted" style={{ fontSize: '1.5rem' }}>Analyzing recent payments...</span>
+                <>
+                  <div className="skeleton-pulse" style={{ height: '36px', width: '90%', marginBottom: '6px' }} />
+                  <div className="skeleton-pulse" style={{ height: '36px', width: '60%' }} />
+                </>
               ) : (
                 renderTitle(personality.title)
               )}
@@ -151,32 +185,72 @@ export default function PersonalityPage() {
 
 
 
-        {/* Category Breakdown */}
+        {/* Category Breakdown (Recharts) */}
         <div className="section-header" style={{ margin: '20px 0 12px' }}>
           {t('me.spendingBreakdown', language)}
         </div>
-
-        {categories.map((cat) => (
-          <div key={cat.label} style={{ marginBottom: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-              <span className="text-mono" style={{ fontSize: '0.7rem', fontWeight: 700 }}>
-                {cat.label}
-              </span>
-              <span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                {cat.percent}%
-              </span>
+        <div style={{ height: '220px', width: '100%' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={categories}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
+                dataKey="percent"
+              >
+                {categories.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <RechartsTooltip 
+                formatter={(value: number) => [`${value}%`, 'Spend']}
+                contentStyle={{ background: 'var(--card-bg)', border: '2px solid var(--border-color)', fontWeight: 700 }}
+                itemStyle={{ color: 'var(--text-primary)' }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        {/* Category Legend */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
+          {categories.map(c => (
+            <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', background: c.color, borderRadius: '50%' }} />
+              <span className="text-mono" style={{ fontSize: '0.65rem' }}>{c.label} {c.percent}%</span>
             </div>
-            <div className="stat-bar">
-              <div
-                className="stat-bar-fill"
-                style={{
-                  width: `${cat.percent}%`,
-                  background: cat.color,
+          ))}
+        </div>
+
+        {/* When do you spend Heatmap (Recharts) */}
+        <div className="section-header" style={{ margin: '24px 0 12px' }}>
+          When do you spend?
+        </div>
+        <div style={{ height: '200px', width: '100%', marginLeft: '-20px' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <XAxis type="number" dataKey="x" name="Day" tickFormatter={(v) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][v]} stroke="var(--border-color)" tick={{ fill: 'var(--text-muted)', fontSize: 10, fontFamily: 'var(--font-mono)' }} tickLine={false} axisLine={false} domain={[-0.5, 6.5]} tickCount={7} />
+              <YAxis type="number" dataKey="y" name="Time" tickFormatter={(v) => ['Morn','Aft','Eve','Night'][v]} stroke="var(--border-color)" tick={{ fill: 'var(--text-muted)', fontSize: 10, fontFamily: 'var(--font-mono)' }} tickLine={false} axisLine={false} domain={[-0.5, 3.5]} tickCount={4} reversed />
+              <ZAxis type="number" dataKey="value" range={[50, 400]} />
+              <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} 
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <div style={{ background: 'var(--card-bg)', border: '2px solid var(--border-color)', padding: '8px', fontWeight: 700 }}>
+                        <p className="text-mono" style={{ fontSize: '0.65rem' }}>{data.day} {data.time}</p>
+                        <p style={{ color: 'var(--nets-red)' }}>{data.value} transactions</p>
+                      </div>
+                    );
+                  }
+                  return null;
                 }}
               />
-            </div>
-          </div>
-        ))}
+              <Scatter name="Spend Heatmap" data={heatmapData} fill="var(--nets-red)" fillOpacity={0.8} />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
 
         {/* Stats grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', margin: '16px 0' }}>
@@ -207,7 +281,15 @@ export default function PersonalityPage() {
             <div className="text-mono" style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
               {t('me.spendingStory', language)}
             </div>
-            {personality.isLoading ? 'Writing your new story...' : personality.story}
+            {personality.isLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div className="skeleton-pulse" style={{ height: '14px', width: '100%' }} />
+                <div className="skeleton-pulse" style={{ height: '14px', width: '100%' }} />
+                <div className="skeleton-pulse" style={{ height: '14px', width: '80%' }} />
+              </div>
+            ) : (
+              <Typewriter text={personality.story} speed={20} />
+            )}
           </div>
         )}
 

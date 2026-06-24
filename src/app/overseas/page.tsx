@@ -6,10 +6,9 @@ import { formatCurrency, convertCurrency } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { t } from '@/data/translations';
 
-// Dynamically import map with no SSR since Leaflet needs window
-const MapComponent = dynamic(() => import('@/components/MapComponent'), { 
+const NETSMap = dynamic(() => import('@/components/overseas/NETSMap'), { 
   ssr: false,
-  loading: () => <div className="mock-map"><div className="text-mono" style={{position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)'}}>LOADING MAP...</div></div>
+  loading: () => <div className="skeleton-pulse" style={{width: '100%', height: '400px'}} />
 });
 
 const friendPayments = [
@@ -33,27 +32,11 @@ const destinations = [
 ];
 
 export default function OverseasPage() {
-  const [isOverseas, setIsOverseas] = useState(true);
-  const [coords, setCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [isOverseas, setIsOverseas] = useState(false);
   const { language } = useApp();
   const rate = 25.5; // SGD to THB
 
-  useEffect(() => {
-    if (isOverseas && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCoords({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-        },
-        () => {
-          // Fallback to Bangkok if denied or error
-          setCoords({ lat: 13.7563, lng: 100.5018 });
-        }
-      );
-    }
-  }, [isOverseas]);
+
 
   const spendingSummary = {
     totalSGD: 51.50,
@@ -88,10 +71,14 @@ export default function OverseasPage() {
             {isOverseas ? t('overseas.youreOverseas', language) : t('overseas.youreHome', language)}
           </div>
           <div className="text-mono" style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
-            {isOverseas ? 'BANGKOK, THAILAND' : t('overseas.tapToToggle', language)}
+            {isOverseas ? 'BANGKOK, THAILAND' : 'LOCAL MODE'}
           </div>
         </div>
         <div className="toggle-switch" />
+      </div>
+
+      <div className="animate-slide-up stagger-2" style={{ margin: '16px 0' }}>
+        <NETSMap isOverseasMode={isOverseas} />
       </div>
 
       {isOverseas ? (
@@ -180,36 +167,6 @@ export default function OverseasPage() {
             </div>
           </div>
 
-          {/* Live Map */}
-          <div className="section-header animate-slide-up stagger-4">{t('overseas.netsNearby', language)}</div>
-          <div className="animate-slide-up stagger-4" style={{ position: 'relative' }}>
-            {coords ? (
-              <MapComponent lat={coords.lat} lng={coords.lng} />
-            ) : (
-              <div className="mock-map">
-                <div className="text-mono" style={{position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'var(--text-primary)'}}>
-                  LOCATING YOU...
-                </div>
-              </div>
-            )}
-            
-            {/* Map label */}
-            <div style={{
-              position: 'absolute',
-              top: '8px',
-              left: '8px',
-              zIndex: 3,
-              background: 'var(--card-bg)',
-              border: '2px solid var(--border-color)',
-              color: 'var(--text-primary)',
-              padding: '2px 6px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.55rem',
-              fontWeight: 700,
-            }}>
-              LIVE GPS FEED
-            </div>
-          </div>
 
           {/* Friends Paid Here */}
           <div className="section-header animate-slide-up stagger-5">{t('overseas.friendsPaid', language)}</div>

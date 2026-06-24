@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import BottomNav from '@/components/BottomNav';
 import Header from '@/components/Header';
-import { AppProvider } from '@/context/AppContext';
+
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -50,14 +50,12 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <AppProvider>
-          <div className="app-shell">
-            <Header />
-            {children}
-            <BottomNav />
-          </div>
-          <div className="grain-overlay" />
-        </AppProvider>
+        <div className="app-shell">
+          <Header />
+          {children}
+          <BottomNav />
+        </div>
+        <div className="grain-overlay" />
       </body>
     </html>
   );

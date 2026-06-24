@@ -1856,3 +1856,19 @@ html.dark .locked-overlay {
   border-color: var(--border-color);
   box-shadow: 6px 6px 0 #000;
 }
+
+@keyframes skeletonPulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.skeleton-pulse {
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+  background-color: var(--paper-grey);
+  border-radius: 4px;
+}
+
+html.dark .skeleton-pulse {
+  background-color: #333;
+}

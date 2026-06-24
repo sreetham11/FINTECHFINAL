@@ -1,6 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { transactions as baseTransactions, Transaction } from '@/data/transactions';
 
 // ===== Types =====
@@ -53,13 +55,32 @@ const defaultPersonality: PersonalityData = {
   isLoading: false,
 };
 
-const AppContext = createContext<AppContextType | null>(null);
-
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
-  return ctx;
+interface AppState {
+  simulatedTransactions: Transaction[];
+  addTransaction: (txn: Transaction) => void;
+  personality: PersonalityData;
+  setPersonality: (p: PersonalityData) => void;
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
 }
+
+const useStore = create<AppState>()(
+  persist(
+    (set) => ({
+      simulatedTransactions: [],
+      addTransaction: (txn) => set((state) => ({ simulatedTransactions: [txn, ...state.simulatedTransactions] })),
+      personality: defaultPersonality,
+      setPersonality: (p) => set({ personality: p }),
+      language: 'en',
+      setLanguage: (lang) => set({ language: lang }),
+      theme: 'light',
+      setTheme: (theme) => set({ theme }),
+    }),
+    { name: 'nets-quest-storage' }
+  )
+);
 
 // ===== Helpers =====
 function computeCategories(txns: Transaction[]): CategoryBreakdown[] {
@@ -129,61 +150,31 @@ function computeMoodPattern(txns: Transaction[]): { primary: string; secondary: 
   return { primary, secondary };
 }
 
-// ===== Provider =====
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [simulatedTransactions, setSimulatedTransactions] = useState<Transaction[]>([]);
-  const [personality, setPersonality] = useState<PersonalityData>(defaultPersonality);
-  const [language, setLanguageState] = useState<Language>('en');
-  const [theme, setThemeState] = useState<Theme>('light');
+export function useApp(): AppContextType {
+  const store = useStore();
+  const allTransactions = [...store.simulatedTransactions, ...baseTransactions];
 
-  const allTransactions = [...simulatedTransactions, ...baseTransactions];
-  const categories = computeCategories(allTransactions);
-  const peakTime = computePeakTime(allTransactions);
-  const moodPattern = computeMoodPattern(allTransactions);
-
-  // Load persisted settings
+  // Apply theme effect
   useEffect(() => {
-    const savedLang = localStorage.getItem('nets-quest-language') as Language | null;
-    if (savedLang && ['en', 'zh', 'ms', 'ta'].includes(savedLang)) {
-      setLanguageState(savedLang);
-    }
-
-    const savedTheme = localStorage.getItem('nets-quest-theme') as Theme | null;
-    if (savedTheme && ['light', 'dark'].includes(savedTheme)) {
-      setThemeState(savedTheme);
-      document.documentElement.classList.toggle('dark', savedTheme === 'dark');
-    }
-  }, []);
-
-  const setLanguage = useCallback((lang: Language) => {
-    setLanguageState(lang);
-    localStorage.setItem('nets-quest-language', lang);
-  }, []);
-
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-    localStorage.setItem('nets-quest-theme', t);
-    document.documentElement.classList.toggle('dark', t === 'dark');
-  }, []);
+    document.documentElement.classList.toggle('dark', store.theme === 'dark');
+  }, [store.theme]);
 
   const refreshPersonality = useCallback(async () => {
-    setPersonality((p) => ({ ...p, isLoading: true }));
-
+    store.setPersonality({ ...store.personality, isLoading: true });
     try {
-      const langParam = language !== 'en' ? language : '';
       const response = await fetch('/api/generate-personality', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transactions: allTransactions.slice(0, 10),
-          language: langParam,
+          language: store.language !== 'en' ? store.language : '',
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
         if (data.title && data.title.trim()) {
-          setPersonality({
+          store.setPersonality({
             title: data.title,
             traits: (data.traits || []).map((t: string, i: number) => ({
               label: t,
@@ -195,45 +186,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
       }
-    } catch {
-      // Fallback on error
-    }
+    } catch {}
 
-    setPersonality({ ...defaultPersonality, isLoading: false });
+    store.setPersonality({ ...defaultPersonality, isLoading: false });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language, simulatedTransactions.length]);
+  }, [store.language, store.simulatedTransactions.length]);
 
-  const addTransaction = useCallback((txn: Transaction) => {
-    setSimulatedTransactions((prev) => [txn, ...prev]);
-    // Trigger personality refresh after a brief delay to let state settle
-    setTimeout(() => {
-      refreshPersonality();
-    }, 100);
-  }, [refreshPersonality]);
+  return {
+    simulatedTransactions: store.simulatedTransactions,
+    allTransactions,
+    addTransaction: (txn) => {
+      store.addTransaction(txn);
+      setTimeout(() => refreshPersonality(), 100);
+    },
+    personality: store.personality,
+    categories: computeCategories(allTransactions),
+    peakTime: computePeakTime(allTransactions),
+    moodPattern: computeMoodPattern(allTransactions),
+    refreshPersonality,
+    language: store.language,
+    setLanguage: store.setLanguage,
+    theme: store.theme,
+    setTheme: store.setTheme,
+  };
+}
 
-  // Initial personality fetch
-  useEffect(() => {
-    refreshPersonality();
-  }, [refreshPersonality]);
-
-  return (
-    <AppContext.Provider
-      value={{
-        simulatedTransactions,
-        allTransactions,
-        addTransaction,
-        personality,
-        categories,
-        peakTime,
-        moodPattern,
-        refreshPersonality,
-        language,
-        setLanguage,
-        theme,
-        setTheme,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  );
+// Dummy provider to not break layout.tsx imports
+export function AppProvider({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

@@ -3,8 +3,16 @@
 import { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import MomentCard from '@/components/MomentCard';
+import CountUp from '@/components/CountUp';
 import SimulatePayment, { SimulationResult } from '@/components/SimulatePayment';
 import { t } from '@/data/translations';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+
+const NETSMap = dynamic(() => import('@/components/overseas/NETSMap'), { 
+  ssr: false,
+  loading: () => <div className="skeleton-pulse" style={{width: '100%', height: '200px'}} />
+});
 
 export default function HomePage() {
   const [showSimulate, setShowSimulate] = useState(false);
@@ -98,7 +106,9 @@ export default function HomePage() {
       {/* Balance Card */}
       <div className="balance-card animate-slide-up stagger-1" style={{ transform: 'rotate(-0.8deg)' }}>
         <div className="balance-label">{t('home.balance', language)}</div>
-        <div className="balance-amount">$247.80</div>
+        <div className="balance-amount">
+          <CountUp value={247.80} prefix="$" decimals={2} />
+        </div>
         <div className="balance-currency">{t('home.currency', language)}</div>
         <div style={{ 
           position: 'absolute', 
@@ -190,7 +200,7 @@ export default function HomePage() {
             {t('home.memoriesLabel', language)}
           </div>
           <div className="text-display" style={{ fontSize: '1.5rem', color: 'var(--nets-red)' }}>
-            {allTransactions.length + 20}
+            <CountUp value={allTransactions.length + 20} />
           </div>
         </div>
         <div style={{
@@ -204,7 +214,7 @@ export default function HomePage() {
             {t('home.friendsLabel', language)}
           </div>
           <div className="text-display" style={{ fontSize: '1.5rem', color: 'var(--nets-blue)' }}>
-            4
+            <CountUp value={4} />
           </div>
         </div>
         <div style={{
@@ -218,9 +228,22 @@ export default function HomePage() {
             {t('home.countriesLabel', language)}
           </div>
           <div className="text-display" style={{ fontSize: '1.5rem', color: 'var(--hot-pink)' }}>
-            2
+            <CountUp value={2} />
           </div>
         </div>
+      </div>
+
+      {/* Local Map Widget */}
+      <div className="section-header animate-slide-up stagger-8" style={{ marginTop: '24px' }}>
+        NETS Near You
+      </div>
+      <div className="animate-slide-up stagger-8" style={{ position: 'relative' }}>
+        <NETSMap isOverseasMode={false} compact={true} />
+        <Link href="/overseas" style={{ textDecoration: 'none' }}>
+          <button className="btn-secondary" style={{ width: '100%', marginTop: '8px' }}>
+            See all nearby
+          </button>
+        </Link>
       </div>
 
       {/* Footer barcode */}
