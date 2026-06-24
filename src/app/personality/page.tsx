@@ -170,9 +170,9 @@ export default function PersonalityPage() {
                   key={`${trait.label}-${i}`}
                   className="trait-tag"
                   style={{
-                    background: trait.color,
-                    color: 'white',
-                    borderColor: 'var(--border-color)',
+                    background: 'rgba(255,255,255,0.15)',
+                    color: '#FFFFFF !important',
+                    border: '1.5px solid rgba(255,255,255,0.5)',
                     transform: `rotate(${Math.random() * 4 - 2}deg)`,
                   }}
                 >

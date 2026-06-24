@@ -125,7 +125,17 @@ const useStore = create<AppState>()(
       language: 'en',
       setLanguage: (lang) => set({ language: lang }),
       theme: 'light',
-      setTheme: (theme) => set({ theme }),
+      setTheme: (theme) => {
+        if (typeof document !== 'undefined') {
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+          localStorage.setItem('nets-quest-theme', theme);
+        }
+        set({ theme });
+      },
     }),
     { name: 'nets-quest-storage' }
   )
@@ -201,6 +211,17 @@ function computeMoodPattern(txns: Transaction[]): { primary: string; secondary: 
 
 export function useApp() {
   const store = useStore();
+
+  // Sync dark mode class when Zustand hydrates with persisted theme
+  useEffect(() => {
+    if (store.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('nets-quest-theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('nets-quest-theme', 'light');
+    }
+  }, [store.theme]);
 
   const allTransactions = [...store.simulatedTransactions, ...baseTransactions];
 

@@ -91,7 +91,7 @@ export default function VaultPage() {
             position: 'absolute',
             top: '50%',
             left: '50%',
-            transform: 'translate(-50%, -50%) rotate(90deg)',
+            transform: 'translate(-50%, -50%)',
             textAlign: 'center',
           }}>
             <div className="text-display" style={{ fontSize: '1.3rem', color: 'var(--nets-red)' }}>
@@ -154,12 +154,12 @@ export default function VaultPage() {
 
       {/* Transaction Log */}
       <div className="section-header animate-slide-up stagger-5">VAULT TRANSACTIONS</div>
-      <div className="zine-card animate-slide-up stagger-5" style={{ transform: 'rotate(-0.3deg)' }}>
+      <div className="zine-card card-dark animate-slide-up stagger-5" style={{ transform: 'rotate(-0.3deg)' }}>
         {activeVault.transactions.map((txn) => (
           <div key={txn.id} className="vault-txn">
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>{txn.merchant}</div>
-              <div className="text-mono" style={{ fontSize: '0.6rem', color: '#999' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#FFFFFF' }}>{txn.merchant}</div>
+              <div className="text-mono" style={{ fontSize: '0.6rem', color: '#FFFFFF' }}>
                 {txn.triggeredBy} · {txn.date}
               </div>
             </div>
@@ -189,7 +189,7 @@ export default function VaultPage() {
           {completedVaults.map((vault) => (
             <div
               key={vault.id}
-              className="zine-card animate-slide-up stagger-7"
+              className="zine-card card-dark animate-slide-up stagger-7"
               style={{
                 transform: 'rotate(0.8deg)',
                 opacity: 0.7,
@@ -199,10 +199,10 @@ export default function VaultPage() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ fontWeight: 900, fontSize: '1rem' }}>
+                  <div style={{ fontWeight: 900, fontSize: '1rem', color: '#FFFFFF' }}>
                     {vault.name} {vault.emoji}
                   </div>
-                  <div className="text-mono" style={{ fontSize: '0.65rem', color: '#999' }}>
+                  <div className="text-mono" style={{ fontSize: '0.65rem', color: '#FFFFFF' }}>
                     {vault.members.length} people · {formatCurrency(vault.targetAmount)}
                   </div>
                 </div>

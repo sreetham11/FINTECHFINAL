@@ -45,19 +45,21 @@ export default function OverseasPage() {
   };
 
   return (
-    <div className="page-content">
+    <div className="page-content" style={{ paddingTop: '1rem' }}>
       {/* Header stamp */}
       <div className="animate-slap" style={{ margin: '20px 0 0' }}>
         <div
-          className="stamp-tag stamp-tag-pink"
+          className="stamp-tag"
           style={{
+            background: 'var(--ink-black)',
+            color: '#fff',
             fontSize: '0.7rem',
             padding: '6px 12px',
             transform: 'rotate(-1.5deg)',
             display: 'inline-block',
           }}
         >
-          {t('overseas.mode', language)}
+          OVERSEAS MODE
         </div>
       </div>
 

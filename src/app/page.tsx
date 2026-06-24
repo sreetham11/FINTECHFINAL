@@ -280,13 +280,13 @@ export default function HomePage() {
       <div className="section-header animate-slide-up stagger-6" style={{ marginTop: '24px' }}>
         Your Month Ahead
       </div>
-      <div className="zine-card animate-slide-up stagger-6" style={{ transform: 'rotate(-0.5deg)', border: '2px dashed var(--ink-black)' }}>
+      <div className="zine-card card-dark animate-slide-up stagger-6" style={{ transform: 'rotate(-0.5deg)', border: '2px dashed rgba(255,255,255,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
           <div style={{ fontSize: '2rem' }}>🔮</div>
           <div>
-            <div className="text-display" style={{ fontSize: '1.1rem', color: 'var(--nets-blue)' }}>Spending Forecast</div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: '4px', lineHeight: '1.4' }}>
-              At your current rate, you'll spend <strong>$380</strong> this month. Your Bangkok vault needs <strong>$88</strong> more — you'll hit it by July 3rd!
+            <div className="text-display" style={{ fontSize: '1.1rem', color: '#FFFFFF' }}>Spending Forecast</div>
+            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.85)', marginTop: '4px', lineHeight: '1.4' }}>
+              At your current rate, you&apos;ll spend <strong style={{ color: '#FFFFFF' }}>$380</strong> this month. Your Bangkok vault needs <strong style={{ color: '#FFFFFF' }}>$88</strong> more — you&apos;ll hit it by July 3rd!
             </div>
           </div>
         </div>

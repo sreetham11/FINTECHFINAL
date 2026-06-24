@@ -926,7 +926,7 @@ html.dark .filter-tab.active {
   border-bottom: 1.5px dashed var(--divider-color);
 }
 
-.vault-member:last-child {
+.vault-member:last-of-type {
   border-bottom: none;
 }
 
@@ -1760,6 +1760,11 @@ html.dark .moment-card {
 }
 .card-dark .text-mono-bold {
   color: var(--nets-red) !important;
+}
+
+/* Vault transaction rows — merchant name & metadata must be white */
+.card-dark .vault-txn > div:first-child div {
+  color: #FFFFFF !important;
 }
 
 /* Merchant names */

@@ -108,20 +108,43 @@ export default function NETSMap({ isOverseasMode = false, compact = false }: NET
 
   if (loadError || !process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
     return (
-      <div style={{ width: '100%', height: compact ? '200px' : '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#E8E4DF', border: '2.5px solid var(--border-color)', position: 'relative' }}>
-        {/* Mock SVG Map Fallback */}
-        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style={{ position: 'absolute', opacity: 0.5 }}>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ccc" strokeWidth="1"/>
+      <div style={{ width: '100%', height: compact ? '200px' : '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5', border: '2.5px solid var(--border-color)', position: 'relative', overflow: 'hidden' }}>
+        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style={{ position: 'absolute' }}>
+          <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+            <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#e0e0e0" strokeWidth="1"/>
           </pattern>
           <rect width="100%" height="100%" fill="url(#grid)" />
-          <circle cx="50%" cy="50%" r="8" fill="#C0001F" />
-          <circle cx="30%" cy="40%" r="6" fill="#C0001F" />
-          <circle cx="70%" cy="60%" r="6" fill="#C0001F" />
+          
+          <g transform="translate(100, 80)">
+            <polygon points="0,-12 12,0 0,12 -12,0" fill="#C0001F"/>
+            <text x="16" y="4" fontSize="12" fontWeight="bold" fill="#1A1A1A" fontFamily="monospace">7-Eleven</text>
+          </g>
+          
+          <g transform="translate(250, 150)">
+            <polygon points="0,-12 12,0 0,12 -12,0" fill="#C0001F"/>
+            <text x="16" y="4" fontSize="12" fontWeight="bold" fill="#1A1A1A" fontFamily="monospace">Central World</text>
+          </g>
+          
+          <g transform="translate(80, 220)">
+            <polygon points="0,-12 12,0 0,12 -12,0" fill="#C0001F"/>
+            <text x="16" y="4" fontSize="12" fontWeight="bold" fill="#1A1A1A" fontFamily="monospace">Terminal 21</text>
+          </g>
+
+          <g transform="translate(180, 50)">
+            <polygon points="0,-12 12,0 0,12 -12,0" fill="#C0001F"/>
+            <text x="16" y="4" fontSize="12" fontWeight="bold" fill="#1A1A1A" fontFamily="monospace">Chatuchak</text>
+          </g>
+          
+          <g transform="translate(200, 280)">
+            <polygon points="0,-12 12,0 0,12 -12,0" fill="#C0001F"/>
+            <text x="16" y="4" fontSize="12" fontWeight="bold" fill="#1A1A1A" fontFamily="monospace">MBK Center</text>
+          </g>
+
+          <g transform="translate(50, 320)">
+            <polygon points="0,-12 12,0 0,12 -12,0" fill="#C0001F"/>
+            <text x="16" y="4" fontSize="12" fontWeight="bold" fill="#1A1A1A" fontFamily="monospace">Khao San Rd</text>
+          </g>
         </svg>
-        <span className="text-mono" style={{ zIndex: 1, background: '#fff', padding: '4px 8px', border: '1px solid #000' }}>
-          Map unavailable (Add API Key)
-        </span>
       </div>
     );
   }
