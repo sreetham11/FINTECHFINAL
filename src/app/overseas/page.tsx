@@ -1,306 +1,237 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { formatCurrency, convertCurrency } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { t } from '@/data/translations';
+import { useRouter } from 'next/navigation';
 
 const NETSMap = dynamic(() => import('@/components/overseas/NETSMap'), { 
   ssr: false,
   loading: () => <div className="skeleton-pulse" style={{width: '100%', height: '400px'}} />
 });
 
-const friendPayments = [
-  { friend: 'Kai', merchant: '7-Eleven Sukhumvit', amount: 4.20, emoji: '🏪', timeAgo: '2h ago' },
-  { friend: 'Priya', merchant: 'Chatuchak Market', amount: 18.50, emoji: '🛍️', timeAgo: '5h ago' },
-  { friend: 'Wei', merchant: 'Terminal 21 Food Court', amount: 6.80, emoji: '🍜', timeAgo: '1d ago' },
-];
-
-const travelTips = [
-  { tip: 'NETS QR works at all 7-Eleven Thailand locations', icon: '🏪' },
-  { tip: 'Look for the NETS logo at Central Group malls', icon: '🏬' },
-  { tip: 'Street food vendors may not accept NETS — bring cash backup', icon: '💵' },
-  { tip: 'Currency conversion happens at real-time rates, no hidden fees', icon: '💱' },
-];
-
 const destinations = [
-  { name: 'Bangkok', country: 'Thailand', flag: '🇹🇭', acceptance: 'HIGH', color: '#00A86B', merchants: '2,400+' },
-  { name: 'Tokyo', country: 'Japan', flag: '🇯🇵', acceptance: 'MEDIUM', color: '#F5C800', merchants: '800+' },
-  { name: 'Kuala Lumpur', country: 'Malaysia', flag: '🇲🇾', acceptance: 'HIGH', color: '#00A86B', merchants: '3,100+' },
-  { name: 'Bali', country: 'Indonesia', flag: '🇮🇩', acceptance: 'MEDIUM', color: '#F5C800', merchants: '600+' },
+  { code: 'MY', name: 'Kuala Lumpur', country: 'Malaysia', flag: '🇲🇾', acceptance: 'HIGH', color: '#00A86B', merchants: '3,100+' },
+  { code: 'TH', name: 'Bangkok', country: 'Thailand', flag: '🇹🇭', acceptance: 'HIGH', color: '#00A86B', merchants: '2,400+' },
+  { code: 'JP', name: 'Tokyo', country: 'Japan', flag: '🇯🇵', acceptance: 'MEDIUM', color: '#F5C800', merchants: '800+' },
+  { code: 'ID', name: 'Bali', country: 'Indonesia', flag: '🇮🇩', acceptance: 'MEDIUM', color: '#F5C800', merchants: '600+' },
 ];
 
 export default function OverseasPage() {
-  const [isOverseas, setIsOverseas] = useState(false);
+  const [activeSession, setActiveSession] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState(false);
+  const [briefing, setBriefing] = useState('');
   const { language } = useApp();
-  const rate = 25.5; // SGD to THB
+  const router = useRouter();
 
+  // Load active session
+  useEffect(() => {
+    fetch('/api/overseas/active')
+      .then(res => {
+        if (res.status === 401) {
+          router.push('/auth/login');
+          return;
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data && data.session) {
+          setActiveSession(data.session);
+        }
+      })
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false));
+  }, [router]);
 
+  const startOverseasMode = async (countryCode: string) => {
+    setToggling(true);
+    setBriefing('');
+    try {
+      const res = await fetch('/api/overseas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ countryCode }),
+      });
 
-  const spendingSummary = {
-    totalSGD: 51.50,
-    totalTHB: convertCurrency(51.50, rate),
-    transactionCount: 4,
+      if (!res.ok) throw new Error('Failed to start overseas session');
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('0:')) {
+              try {
+                const text = JSON.parse(line.slice(2));
+                setBriefing(prev => prev + text);
+              } catch {
+                setBriefing(prev => prev + line.slice(2).replace(/^"|"$/g, ''));
+              }
+            } else if (!line.includes(':')) {
+              setBriefing(prev => prev + line);
+            }
+          }
+        }
+      }
+
+      // Re-fetch active session
+      const activeRes = await fetch('/api/overseas/active');
+      const activeData = await activeRes.json();
+      if (activeData && activeData.session) {
+        setActiveSession(activeData.session);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setToggling(false);
+    }
   };
 
+  const endOverseasMode = async () => {
+    setToggling(true);
+    try {
+      const res = await fetch('/api/overseas/active', {
+        method: 'POST',
+      });
+      if (res.ok) {
+        setActiveSession(null);
+        setBriefing('');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="page-content min-height-100dvh flex justify-center items-center" style={{ background: '#F7F4EF' }}>
+        <div className="font-space-mono text-xs uppercase tracking-widest text-[#C0001F] animate-pulse">
+          Loading Travel Settings... ✈️
+        </div>
+      </div>
+    );
+  }
+
+  const isOverseas = !!activeSession;
+  const currentDest = destinations.find(d => d.code === activeSession?.countryCode) || destinations[1];
+
   return (
-    <div className="page-content" style={{ paddingTop: '1rem' }}>
-      {/* Header stamp */}
-      <div className="animate-slap" style={{ margin: '20px 0 0' }}>
-        <div
-          className="stamp-tag"
-          style={{
-            background: 'var(--ink-black)',
-            color: '#fff',
-            fontSize: '0.7rem',
-            padding: '6px 12px',
-            transform: 'rotate(-1.5deg)',
-            display: 'inline-block',
-          }}
-        >
-          OVERSEAS MODE
-        </div>
-      </div>
+    <div className="page-content min-height-100dvh py-8 px-4" style={{ background: '#F7F4EF', paddingTop: '90px', paddingBottom: '90px' }}>
+      <div className="max-w-xl mx-auto space-y-6">
 
-      {/* Toggle */}
-      <div
-        className={`overseas-toggle animate-slide-up stagger-1 ${isOverseas ? 'active' : ''}`}
-        onClick={() => setIsOverseas(!isOverseas)}
-      >
-        <div>
-          <div style={{ fontWeight: 900, fontSize: '1rem' }}>
-            {isOverseas ? t('overseas.youreOverseas', language) : t('overseas.youreHome', language)}
-          </div>
-          <div className="text-mono" style={{ fontSize: '0.6rem', opacity: 0.6, marginTop: '2px' }}>
-            {isOverseas ? 'BANGKOK, THAILAND' : 'LOCAL MODE'}
+        {/* Header Tag */}
+        <div className="animate-slap">
+          <div className="stamp-tag stamp-tag-pink surface-pink uppercase tracking-widest text-xs py-1.5 px-4 font-bold border-2 border-[#1A1A1A]">
+            Overseas travel Mode
           </div>
         </div>
-        <div className="toggle-switch" />
-      </div>
 
-      <div className="animate-slide-up stagger-2" style={{ margin: '16px 0' }}>
+        {/* Dynamic Map Component */}
         <NETSMap isOverseasMode={isOverseas} />
-      </div>
 
-      {isOverseas ? (
-        /* ===== OVERSEAS ACTIVE STATE ===== */
-        <>
-          {/* Confidence Score */}
-          <div
-            className="zine-card zine-card-pink card-red animate-slide-up stagger-2"
-            style={{ transform: 'rotate(-0.5deg)', textAlign: 'center' }}
-          >
-            <div className="text-mono" style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.8)' }}>
-              {t('overseas.confidenceScore', language)}
-            </div>
-            <div className="text-display" style={{ fontSize: '1.6rem', margin: '8px 0 4px', color: '#fff' }}>
-              {t('overseas.netsReady', language)}<br />{t('overseas.in', language)} Bangkok <span style={{ color: 'var(--stamp-green)' }}>🟢</span>
-            </div>
-            <div className="text-mono" style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.8)' }}>
-              2,400+ MERCHANTS ACCEPT NETS · HIGH COVERAGE
-            </div>
-          </div>
-
-          {/* Currency Conversion */}
-          <div className="zine-card animate-slide-up stagger-3" style={{ transform: 'rotate(0.3deg)', marginTop: '16px' }}>
-            <div className="text-mono" style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-              {t('overseas.liveRate', language)}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
-              <div>
-                <div className="text-display" style={{ fontSize: '1.4rem' }}>$1.00</div>
-                <div className="text-mono" style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>SGD</div>
-              </div>
-              <div style={{ fontWeight: 900, fontSize: '1.2rem', color: 'var(--nets-red)' }}>→</div>
-              <div>
-                <div className="text-display" style={{ fontSize: '1.4rem', color: 'var(--nets-blue)' }}>
-                  ฿{rate.toFixed(1)}
-                </div>
-                <div className="text-mono" style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>THB</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Spending Summary */}
-          <div
-            className="animate-slide-up stagger-3"
-            style={{
-              display: 'flex',
-              gap: '8px',
-              marginTop: '16px',
-            }}
-          >
-            <div style={{
-              flex: 1,
-              background: 'var(--card-bg)',
-              border: '2.5px solid var(--border-color)',
-              padding: '12px',
-              textAlign: 'center',
-            }}>
-              <div className="text-mono" style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>{t('overseas.spent', language)} (SGD)</div>
-              <div className="text-display" style={{ fontSize: '1.3rem', color: 'var(--nets-red)' }}>
-                {formatCurrency(spendingSummary.totalSGD)}
-              </div>
-            </div>
-            <div style={{
-              flex: 1,
-              background: 'var(--card-bg)',
-              border: '2.5px solid var(--border-color)',
-              padding: '12px',
-              textAlign: 'center',
-            }}>
-              <div className="text-mono" style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>{t('overseas.spent', language)} (THB)</div>
-              <div className="text-display" style={{ fontSize: '1.3rem', color: 'var(--nets-blue)' }}>
-                ฿{spendingSummary.totalTHB.toFixed(0)}
-              </div>
-            </div>
-            <div style={{
-              flex: 1,
-              background: 'var(--card-bg)',
-              border: '2.5px solid var(--border-color)',
-              padding: '12px',
-              textAlign: 'center',
-            }}>
-              <div className="text-mono" style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>{t('home.payments', language)}</div>
-              <div className="text-display" style={{ fontSize: '1.3rem', color: 'var(--hot-pink)' }}>
-                {spendingSummary.transactionCount}
-              </div>
-            </div>
-          </div>
-
-
-          {/* Friends Paid Here */}
-          <div className="section-header animate-slide-up stagger-5">{t('overseas.friendsPaid', language)}</div>
-          {friendPayments.map((fp, i) => (
-            <div
-              key={fp.friend}
-              className="zine-card animate-slide-up"
-              style={{
-                transform: `rotate(${i % 2 === 0 ? '-0.5' : '0.7'}deg)`,
-                marginBottom: '10px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '1.5rem' }}>{fp.emoji}</span>
+        {isOverseas ? (
+          /* ================= OVERSEAS ACTIVE STATE ================= */
+          <div className="space-y-6 animate-slide-up">
+            
+            {/* Active Session Card */}
+            <div className="bg-white border-[3px] border-[#1A1A1A] p-6 box-shadow-[6px_6px_0_0_#1A1A1A] space-y-4">
+              <div className="flex justify-between items-center border-b-2 border-[#1A1A1A] pb-3">
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>
-                    {fp.friend} paid at {fp.merchant}
-                  </div>
-                  <div className="text-mono" style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-                    {fp.timeAgo}
-                  </div>
+                  <h2 className="text-2xl font-black text-[#1A1A1A] font-outfit uppercase">
+                    Traveling in {currentDest.name} {currentDest.flag}
+                  </h2>
+                  <p className="text-xs font-space-mono text-[#777] mt-0.5">
+                    Currency: {activeSession.currency} · Session Active
+                  </p>
+                </div>
+                <button
+                  onClick={endOverseasMode}
+                  disabled={toggling}
+                  className="bg-[#C0001F] text-white border-2 border-[#1A1A1A] py-1.5 px-4 font-space-mono text-[0.65rem] font-bold uppercase hover:bg-[#A00018]"
+                >
+                  {toggling ? 'Ending...' : 'End Trip'}
+                </button>
+              </div>
+
+              {/* Tips Culture Card */}
+              <div className="surface-yellow p-4 border border-[#1A1A1A] text-xs font-space-mono">
+                <div className="font-bold uppercase mb-1">💡 Tipping Culture:</div>
+                <p className="leading-relaxed">{activeSession.tipCulture || 'No custom tipping guidelines specified for this region.'}</p>
+              </div>
+            </div>
+
+            {/* AI Travel Briefing Display */}
+            {(briefing || toggling) && (
+              <div className="surface-blue border-[3px] border-[#1A1A1A] p-6 box-shadow-[6px_6px_0_0_#1A1A1A] space-y-4">
+                <h3 className="font-space-mono text-xs font-black uppercase border-b border-[#1A1A1A] pb-1.5">
+                  🔮 AI Travel briefing & Safety Playbook
+                </h3>
+                <div className="font-space-mono text-xs leading-relaxed whitespace-pre-wrap">
+                  {briefing || 'Building payment playbooks for you... 📲'}
                 </div>
               </div>
-              <div className="text-mono-bold" style={{ fontSize: '0.8rem', color: 'var(--nets-red)' }}>
-                {formatCurrency(fp.amount)}
-              </div>
-            </div>
-          ))}
+            )}
 
-          {/* Travel Tips */}
-          <div className="section-header animate-slide-up stagger-6">{t('overseas.travelTips', language)}</div>
-          <div className="animate-slide-up stagger-6" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {travelTips.map((tt, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  background: 'var(--card-bg)',
-                  border: '2px solid var(--border-color)',
-                  transform: `rotate(${i % 2 === 0 ? '-0.3' : '0.3'}deg)`,
-                }}
-              >
-                <span style={{ fontSize: '1.2rem' }}>{tt.icon}</span>
-                <span style={{ fontSize: '0.82rem', lineHeight: '1.4' }}>{tt.tip}</span>
-              </div>
-            ))}
           </div>
-        </>
-      ) : (
-        /* ===== HOME STATE — Planning a trip? ===== */
-        <>
-          <div className="animate-slide-up stagger-2" style={{ margin: '20px 0 16px' }}>
-            <div className="text-display" style={{ fontSize: '1.8rem', lineHeight: '0.95' }}>
-              {t('overseas.planningTrip', language)}<br /><span className="text-pink">{t('overseas.aTrip', language)}</span>
+        ) : (
+          /* ================= HOME STATE - SELECT TRIP ================= */
+          <div className="space-y-6 animate-slide-up">
+            
+            <div className="bg-white border-[3px] border-[#1A1A1A] p-6 box-shadow-[6px_6px_0_0_#1A1A1A]">
+              <h2 className="text-3xl font-extrabold text-[#1A1A1A] font-outfit uppercase">
+                {t('overseas.planningTrip', language)} <span className="text-[#C0001F]">{t('overseas.aTrip', language)}</span>
+              </h2>
+              <p className="text-xs font-space-mono text-[#555] mt-2">
+                Click a destination to unlock exchange rates, local tipping culture briefs, and scan-to-pay safety checklists.
+              </p>
             </div>
-            <div className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-              {t('overseas.seeWhere', language)}
-            </div>
-          </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {destinations.map((dest, i) => (
-              <div
-                key={dest.name}
-                className="destination-card animate-slide-up"
-                style={{
-                  animationDelay: `${0.1 + i * 0.05}s`,
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '3px',
-                    left: '3px',
-                    right: '-3px',
-                    bottom: '-3px',
-                    background: dest.color,
-                    zIndex: -1,
-                  }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '2rem' }}>{dest.flag}</span>
-                    <div>
-                      <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>{dest.name}</div>
-                      <div className="text-mono" style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                        {dest.country}
+            <div className="grid grid-cols-1 gap-4">
+              {destinations.map((dest, i) => (
+                <button
+                  key={dest.code}
+                  onClick={() => startOverseasMode(dest.code)}
+                  disabled={toggling}
+                  className="bg-white text-left p-5 border-[3.5px] border-[#1A1A1A] box-shadow-[5px_5px_0_0_#1A1A1A] hover:bg-[#F7F4EF] active:translate-y-0.5 transition-colors relative overflow-hidden group"
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                      <span className="text-3xl">{dest.flag}</span>
+                      <div>
+                        <div className="font-black text-lg text-[#1A1A1A] font-outfit uppercase">{dest.name}</div>
+                        <div className="text-xs font-space-mono text-[#777]">{dest.country}</div>
                       </div>
                     </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span
-                      className="stamp-tag"
-                      style={{
-                        background: dest.color,
-                        color: 'white',
-                        borderColor: dest.color,
-                        fontSize: '0.55rem',
-                      }}
-                    >
-                      {dest.acceptance}
-                    </span>
-                    <div className="text-mono" style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                      {dest.merchants} {t('general.merchants', language)}
+                    <div className="text-right">
+                      <span className="stamp-tag stamp-tag-green font-mono text-[0.6rem] uppercase tracking-wider">
+                        {dest.acceptance} ACCEPTANCE
+                      </span>
+                      <div className="text-[0.6rem] font-mono text-[#777] mt-1.5">{dest.merchants} NETS Merchants</div>
                     </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ textAlign: 'center', marginTop: '24px', padding: '20px', border: '2px dashed var(--divider-color)' }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '6px' }}>✈️</div>
-            <div className="text-display text-display-sm">{t('overseas.toggleOverseas', language)}</div>
-            <div className="text-mono" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              {t('overseas.whenArrive', language)}
+                </button>
+              ))}
             </div>
-          </div>
-        </>
-      )}
 
-      {/* Footer */}
-      <div style={{ textAlign: 'center', margin: '24px 0 8px' }}>
-        <div className="text-mono" style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>
-          TAP ANYWHERE, PAY EVERYWHERE — NETS QUEST 2026
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ textAlign: 'center', margin: '24px 0 8px' }}>
+          <div className="text-mono" style={{ fontSize: '0.55rem', color: '#999' }}>
+            TAP ANYWHERE, PAY EVERYWHERE — NETS QUEST 2026
+          </div>
         </div>
+
       </div>
     </div>
   );

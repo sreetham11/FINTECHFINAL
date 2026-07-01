@@ -1,0 +1,212 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum PaymentPersonality {
+  THE_PLANNER
+  THE_IMPULSIVE
+  THE_SOCIAL_SPENDER
+  THE_SAVER
+  THE_EXPLORER
+  UNCLASSIFIED
+}
+
+enum Mood {
+  STRESSED
+  NEUTRAL
+  CONFIDENT
+  EXCITED
+}
+
+enum GroupType {
+  TRIP
+  HOUSEHOLD
+  EVENT
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                            String              @id // matches Supabase auth.users.id (UUID)
+  email                         String              @unique
+  name                          String
+  avatar                        String?
+  createdAt                     DateTime            @default(now()) @map("created_at")
+  paymentPersonality            PaymentPersonality  @default(UNCLASSIFIED) @map("payment_personality")
+  paymentPersonalityDescription String?             @map("payment_personality_description")
+  paymentPersonalityTips        Json?               @map("payment_personality_tips")
+  lastClassifiedTxCount         Int                 @default(0) @map("last_classified_tx_count")
+  moodStreak                    Int                 @default(0) @map("mood_streak")
+
+  // Relations
+  groups              GroupMember[]
+  createdGroups       Group[]             @relation("GroupCreator")
+  expenses            Expense[]           @relation("ExpensePaidBy")
+  expenseSplits       ExpenseSplit[]
+  settlementsFrom     Settlement[]        @relation("SettlementFrom")
+  settlementsTo       Settlement[]        @relation("SettlementTo")
+  moodCheckins        MoodCheckin[]
+  transactions        Transaction[]
+  overseasSessions    OverseasSession[]
+  expenseNotes        ExpenseNote[]
+
+  @@map("users")
+}
+
+// ─── Groups ───────────────────────────────────────────────────────────────────
+
+model Group {
+  id          String      @id @default(cuid())
+  name        String
+  type        GroupType   @default(TRIP)
+  currency    String      @default("SGD")
+  emoji       String?
+  destination String?
+  createdBy   String      @map("created_by")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  memoryCache Json?       @map("memory_cache") // cached memory summaries keyed by month
+
+  // Relations
+  creator     User        @relation("GroupCreator", fields: [createdBy], references: [id])
+  members     GroupMember[]
+  expenses    Expense[]
+  settlements Settlement[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  groupId   String   @map("group_id")
+  userId    String   @map("user_id")
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@map("group_members")
+}
+
+// ─── Expenses ─────────────────────────────────────────────────────────────────
+
+model Expense {
+  id            String         @id @default(cuid())
+  groupId       String         @map("group_id")
+  paidBy        String         @map("paid_by")
+  title         String
+  amount        Float
+  currency      String         @default("SGD")
+  category      String
+  receiptUrl    String?        @map("receipt_url")
+  extractedData Json?          @map("extracted_data")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  group      Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  payer      User           @relation("ExpensePaidBy", fields: [paidBy], references: [id])
+  splits     ExpenseSplit[]
+  notes      ExpenseNote[]
+
+  @@map("expenses")
+}
+
+model ExpenseSplit {
+  id          String   @id @default(cuid())
+  expenseId   String   @map("expense_id")
+  userId      String   @map("user_id")
+  amountOwed  Float    @map("amount_owed")
+  isSettled   Boolean  @default(false) @map("is_settled")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("expense_splits")
+}
+
+model Settlement {
+  id         String   @id @default(cuid())
+  groupId    String   @map("group_id")
+  fromUser   String   @map("from_user")
+  toUser     String   @map("to_user")
+  amount     Float
+  currency   String   @default("SGD")
+  settledAt  DateTime @default(now()) @map("settled_at")
+
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  from       User     @relation("SettlementFrom", fields: [fromUser], references: [id])
+  to         User     @relation("SettlementTo", fields: [toUser], references: [id])
+
+  @@map("settlements")
+}
+
+model ExpenseNote {
+  id        String   @id @default(cuid())
+  expenseId String   @map("expense_id")
+  userId    String   @map("user_id")
+  note      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  expense   Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("expense_notes")
+}
+
+// ─── Mood Check-ins ───────────────────────────────────────────────────────────
+
+model MoodCheckin {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  mood            Mood
+  spendingContext String?  @map("spending_context")
+  aiInsight       String?  @map("ai_insight")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("mood_checkins")
+}
+
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  amount      Float
+  currency    String   @default("SGD")
+  merchant    String
+  category    String
+  countryCode String?  @map("country_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
+
+// ─── Overseas Sessions ────────────────────────────────────────────────────────
+
+model OverseasSession {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  countryCode  String    @map("country_code")
+  currency     String
+  tipCulture   String?   @map("tip_culture")
+  safetyRating Int?      @map("safety_rating")
+  startedAt    DateTime  @default(now()) @map("started_at")
+  endedAt      DateTime? @map("ended_at")
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("overseas_sessions")
+}

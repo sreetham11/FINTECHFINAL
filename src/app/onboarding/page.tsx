@@ -47,7 +47,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', padding: '20px', background: '#F7F4EF', paddingBottom: '80px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', padding: '20px', background: '#F7F4EF', paddingBottom: '80px', position: 'relative', overflow: 'auto', overflowX: 'hidden' }}>
       
       {/* Floating particle animation — pure CSS */}
       <style>{`
@@ -104,9 +104,10 @@ export default function OnboardingPage() {
                 value={tempName} 
                 onChange={e => setTempName(e.target.value)} 
                 placeholder="e.g. Sree"
+                className="surface-white"
                 style={{
                   width: '100%', padding: '16px', fontSize: '1.2rem', fontFamily: 'inherit',
-                  border: '2.5px solid var(--ink-black)', borderRadius: '12px', background: 'var(--card-bg)'
+                  border: '2.5px solid var(--ink-black)', borderRadius: '12px'
                 }}
               />
             </div>
@@ -122,11 +123,10 @@ export default function OnboardingPage() {
                   <div 
                     key={friend}
                     onClick={() => toggleFriend(friend)}
+                    className={tempFriends.includes(friend) ? 'surface-red' : 'surface-white'}
                     style={{
                       padding: '16px', border: '2.5px solid var(--ink-black)', borderRadius: '12px',
                       textAlign: 'center', fontWeight: 900, cursor: 'pointer',
-                      background: tempFriends.includes(friend) ? 'var(--nets-red)' : 'var(--card-bg)',
-                      color: tempFriends.includes(friend) ? '#fff' : 'inherit',
                       transition: 'all 0.2s'
                     }}
                   >
@@ -147,9 +147,10 @@ export default function OnboardingPage() {
                 value={tempMerchant} 
                 onChange={e => setTempMerchant(e.target.value)} 
                 placeholder="e.g. Maxwell Food Centre"
+                className="surface-white"
                 style={{
                   width: '100%', padding: '16px', fontSize: '1.2rem', fontFamily: 'inherit',
-                  border: '2.5px solid var(--ink-black)', borderRadius: '12px', background: 'var(--card-bg)'
+                  border: '2.5px solid var(--ink-black)', borderRadius: '12px'
                 }}
               />
             </div>

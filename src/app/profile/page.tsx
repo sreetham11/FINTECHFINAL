@@ -162,13 +162,13 @@ export default function ProfilePage() {
 
       {/* Personality Badge summary */}
       <div className="section-header animate-slide-up stagger-3">{t('profile.personalityType', language)}</div>
-      <div className="zine-card zine-card-red card-red animate-slide-up stagger-3 halftone-bg" style={{ transform: 'rotate(-0.5deg)' }}>
+      <div className="zine-card zine-card-red card-red surface-red animate-slide-up stagger-3 halftone-bg" style={{ transform: 'rotate(-0.5deg)' }}>
         <div className="text-display" style={{ fontSize: '1.3rem', marginBottom: '8px' }}>
           {personality.title}
         </div>
         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
           {personality.traits.map(t => (
-            <span key={t.label} className="stamp-tag stamp-tag-outline" style={{ background: 'rgba(255,255,255,0.15)', color: '#FFFFFF !important', border: '1.5px solid rgba(255,255,255,0.5)' }}>
+            <span key={t.label} className="stamp-tag stamp-tag-outline" style={{ background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.5)' }}>
               {t.label}
             </span>
           ))}

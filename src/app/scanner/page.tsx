@@ -290,8 +290,8 @@ export default function ScannerPage() {
             })}
           </div>
 
-          <div className="zine-card card-dark">
-            <div className="text-mono" style={{ color: '#fff', marginBottom: '16px', fontSize: '0.8rem' }}>Receipt Items</div>
+          <div className="zine-card card-dark surface-dark">
+            <div className="text-mono" style={{ marginBottom: '16px', fontSize: '0.8rem' }}>Receipt Items</div>
             <div className="divider-dashed" style={{ borderColor: '#333' }} />
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
@@ -304,7 +304,7 @@ export default function ScannerPage() {
                     padding: '12px', 
                     border: '1px solid #333',
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span className="text-mono-bold">{item.item}</span>
                       <span className="text-mono-bold">${item.price.toFixed(2)}</span>
                     </div>
@@ -348,11 +348,11 @@ export default function ScannerPage() {
             </div>
             
             <div className="divider-dashed" style={{ borderColor: '#333', marginTop: '16px' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fff', marginTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
               <span className="text-mono">Total</span>
               <span className="text-mono-bold">${totalAmount.toFixed(2)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--nets-red)', marginTop: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
               <span className="text-display" style={{ fontSize: '1.2rem' }}>Your share</span>
               <span className="text-display" style={{ fontSize: '1.2rem' }}>${myShare.toFixed(2)}</span>
             </div>

@@ -22,11 +22,11 @@ export default function MomentCard({ transaction, index, showRotation = true, va
   const shadowColors = ['#C0001F', '#0033A0', '#FF2D87', '#F5C800', '#1A1A1A'];
   const shadowColor = shadowColors[index % shadowColors.length];
   let cardClass = "";
-  if (variant === "red" || shadowColor === '#C0001F') cardClass = "card-red";
-  else if (shadowColor === '#0033A0') cardClass = "card-blue";
-  else if (shadowColor === '#1A1A1A') cardClass = "card-dark";
-  else if (shadowColor === '#FF2D87') cardClass = "card-pink";
-  else if (shadowColor === '#F5C800') cardClass = "card-yellow";
+  if (variant === "red" || shadowColor === '#C0001F') cardClass = "card-red surface-red";
+  else if (shadowColor === '#0033A0') cardClass = "card-blue surface-blue";
+  else if (shadowColor === '#1A1A1A') cardClass = "card-dark surface-dark";
+  else if (shadowColor === '#FF2D87') cardClass = "card-pink surface-pink";
+  else if (shadowColor === '#F5C800') cardClass = "card-yellow surface-yellow";
 
   return (
     <div
@@ -74,7 +74,7 @@ export default function MomentCard({ transaction, index, showRotation = true, va
           )}
         </div>
         {transaction.splitAmount && (
-          <span className="stamp-tag stamp-tag-yellow" style={{ transform: 'rotate(2deg)' }}>
+          <span className="stamp-tag stamp-tag-yellow surface-yellow" style={{ transform: 'rotate(2deg)' }}>
             SPLIT {formatCurrency(transaction.splitAmount)}/ea
           </span>
         )}
@@ -122,14 +122,14 @@ export default function MomentCard({ transaction, index, showRotation = true, va
             </span>
           </div>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="stamp-tag" style={{ background: '#fff', transform: 'rotate(-1deg)' }}>
+            <span className="stamp-tag surface-white" style={{ transform: 'rotate(-1deg)' }}>
               MOOD: {transaction.mood}
             </span>
-            <span className="stamp-tag" style={{ background: '#fff', transform: 'rotate(2deg)' }}>
+            <span className="stamp-tag surface-white" style={{ transform: 'rotate(2deg)' }}>
               {transaction.category.toUpperCase()}
             </span>
             {transaction.isOverseas && (
-              <span className="stamp-tag stamp-tag-pink" style={{ transform: 'rotate(-2deg)' }}>
+              <span className="stamp-tag stamp-tag-pink surface-pink" style={{ transform: 'rotate(-2deg)' }}>
                 OVERSEAS
               </span>
             )}
