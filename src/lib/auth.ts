@@ -1,9 +1,29 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 
 export interface AuthUser {
   id: string;
   email: string;
+}
+
+/**
+ * Upserts the local (Prisma) user record from a *verified* Supabase identity.
+ * Never trust an id/email from the request body — always pass values that came
+ * from supabase.auth.getUser() / exchangeCodeForSession(), never from the client.
+ */
+export async function syncUserRecord(params: {
+  id: string;
+  email: string;
+  name?: string | null;
+}) {
+  const name =
+    params.name?.trim() || params.email.split('@')[0] || 'User';
+  return prisma.user.upsert({
+    where: { id: params.id },
+    update: { email: params.email, name },
+    create: { id: params.id, email: params.email, name },
+  });
 }
 
 /**

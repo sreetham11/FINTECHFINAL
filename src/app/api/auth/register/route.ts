@@ -1,27 +1,35 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { getAuthUser, syncUserRecord } from '@/lib/auth';
 
+// Only the display name is accepted from the client. The user id and email are
+// taken from the verified Supabase session — never from the request body — so a
+// caller cannot create or overwrite another user's record.
 const RegisterSchema = z.object({
-  id: z.string().uuid(),
-  email: z.string().email(),
-  name: z.string().min(1),
+  name: z.string().min(1).max(100).optional(),
 });
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { id, email, name } = RegisterSchema.parse(body);
+    const authUser = await getAuthUser();
 
-    // Upsert user — handles both new signups and re-registrations
-    const user = await prisma.user.upsert({
-      where: { id },
-      update: { name, email },
-      create: { id, email, name },
+    let name: string | undefined;
+    try {
+      const body = await req.json();
+      name = RegisterSchema.parse(body).name;
+    } catch {
+      // Body is optional — fall back to deriving a name from the email.
+    }
+
+    const user = await syncUserRecord({
+      id: authUser.id,
+      email: authUser.email,
+      name,
     });
 
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
+    if (error instanceof NextResponse) return error; // 401 from getAuthUser
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid request', details: error.issues }, { status: 400 });
     }

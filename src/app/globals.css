@@ -30,6 +30,7 @@
   --app-max-width: 430px;
   --nav-height: 72px;
   --header-height: 56px;
+  --sidebar-width: 248px;
 
   /* Cards & surfaces */
   --card-bg: white;
@@ -1932,5 +1933,477 @@ html.dark .skeleton-pulse {
 /* Step 3: Contrast fallback safety net */
 [style*="background"] {
   color: inherit;
+}
+
+/* ===========================
+   NETS MILES — tier-up confetti (pure CSS, no canvas)
+   =========================== */
+.confetti-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  width: 9px;
+  height: 14px;
+  opacity: 0.95;
+  animation: confettiFall 1.8s linear forwards;
+}
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0.9;
+  }
+}
+
+/* NETS Legend badge shimmer (CSS only) */
+@keyframes legendShimmer {
+  0% { background-position: -120% 0; }
+  100% { background-position: 220% 0; }
+}
+.legend-shimmer {
+  background: linear-gradient(
+    100deg,
+    #F5C800 0%,
+    #FFF3B0 35%,
+    #F5C800 55%,
+    #C79A00 75%,
+    #F5C800 100%
+  );
+  background-size: 220% 100%;
+  animation: legendShimmer 2.6s linear infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────── */
+/* AUTH SCREENS — zine / editorial collage                                       */
+/* ──────────────────────────────────────────────────────────────────────────── */
+.auth-screen {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--off-white);
+  position: relative;
+  overflow: hidden;
+}
+/* Scattered collage stickers behind the card */
+.auth-blob {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.auth-card-wrap {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 400px;
+}
+.auth-card {
+  position: relative;
+  background: var(--card-bg, #FBF9F5);
+  border: 3px solid var(--ink-black);
+  padding: 30px 26px 26px;
+  transform: rotate(-1.5deg);
+  animation: slap 0.22s steps(3) both;
+}
+/* Contrasting irregular "thrown" shadow block */
+.auth-card::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: -7px;
+  right: 7px;
+  bottom: -8px;
+  background: var(--hot-pink);
+  z-index: -1;
+}
+/* Subtle paper grain on the card itself */
+.auth-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.auth-card > * { position: relative; z-index: 1; }
+
+.auth-headline {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 3.1rem;
+  line-height: 0.86;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  color: var(--ink-black);
+  margin: 2px 0 14px;
+}
+.auth-headline .accent { color: var(--nets-red); }
+
+.auth-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-black);
+  margin-bottom: 6px;
+}
+.auth-input {
+  width: 100%;
+  background: var(--off-white);
+  border: 2px solid var(--ink-black);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--ink-black);
+  outline: none;
+  transition: box-shadow 0.08s steps(2), background 0.08s steps(2);
+}
+.auth-input::placeholder { color: color-mix(in srgb, var(--ink-black) 40%, transparent); }
+.auth-input:focus {
+  background: var(--card-bg, #fff);
+  box-shadow: 3px 3px 0 0 var(--nets-blue);
+}
+
+/* Rectangular thick-bordered buttons with a snappy slap-on press */
+.auth-btn {
+  width: 100%;
+  border: 2.5px solid var(--ink-black);
+  padding: 13px 18px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: transform 0.08s steps(2), box-shadow 0.08s steps(2), background 0.08s steps(2);
+}
+.auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-btn-primary {
+  background: var(--nets-red);
+  color: #fff;
+  box-shadow: 4px 4px 0 0 var(--ink-black);
+}
+.auth-btn-primary:hover:not(:disabled) {
+  background: var(--hot-pink);
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 var(--ink-black);
+}
+.auth-btn-primary:active:not(:disabled) {
+  transform: translate(0, 0);
+  box-shadow: 0 0 0 0 var(--ink-black);
+}
+.auth-btn-ghost {
+  background: var(--card-bg, #fff);
+  color: var(--ink-black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.auth-btn-ghost:hover { background: var(--off-white); }
+
+/* Stamp/sticker tag — physical rubber-stamp feel */
+.auth-stamp {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 5px 10px;
+  border: 2.5px solid var(--ink-black);
+  background: var(--dirty-yellow);
+  color: var(--ink-black);
+  transform: rotate(-3deg);
+  box-shadow: 2px 2px 0 0 var(--ink-black);
+}
+
+/* Barcode-style trust strip along the bottom */
+.auth-barcode {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 26px;
+  margin-top: 4px;
+}
+.auth-barcode span { display: block; background: var(--ink-black); width: 2px; }
+
+/* Face ID / biometric pill */
+.auth-faceid {
+  background: var(--card-bg, #fff);
+  color: var(--ink-black);
+}
+.auth-faceid:hover { background: var(--hot-pink); color: #fff; }
+
+.auth-error {
+  background: color-mix(in srgb, var(--nets-red) 12%, transparent);
+  border: 2px solid var(--nets-red);
+  color: var(--nets-red);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  margin-bottom: 16px;
+}
+.auth-link { color: var(--nets-red); font-weight: 700; text-decoration: underline; }
+.auth-link:hover { color: var(--hot-pink); }
+
+/* ── Onboarding: less pink + laptop split layout ── */
+.auth-card.onb-card::before { background: var(--nets-blue); } /* navy shadow, not pink */
+
+.onb-layout {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.onb-hero { display: none; }
+.onb-hero-brand {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.4rem;
+  letter-spacing: -0.03em;
+  margin-bottom: 18px;
+}
+.onb-hero-brand .nets { color: var(--nets-red); }
+.onb-hero-brand .quest { color: var(--nets-blue); }
+.onb-hero-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 3rem;
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  color: var(--ink-black);
+  margin-bottom: 14px;
+}
+.onb-hero-title .accent { color: var(--nets-red); }
+.onb-hero-sub {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--ink-black) 65%, transparent);
+  margin-bottom: 22px;
+  max-width: 340px;
+}
+.onb-hero-list { display: flex; flex-direction: column; gap: 12px; }
+.onb-hero-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-black);
+}
+.onb-hero-item span:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 2.5px solid var(--ink-black);
+  background: var(--card-bg, #fff);
+  box-shadow: 3px 3px 0 0 var(--ink-black);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+@media (min-width: 1024px) {
+  .onb-layout {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 60px;
+    max-width: 940px;
+    margin: 0 auto;
+  }
+  .onb-hero { display: flex; flex-direction: column; flex: 1; max-width: 420px; }
+  .onb-layout .auth-card-wrap { flex-shrink: 0; }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────── */
+/* DESKTOP — present the mobile-first app as a centered, framed panel            */
+/* The fixed header + bottom nav already track --app-max-width, so bumping the   */
+/* width and framing the shell keeps everything aligned with no per-page changes.*/
+/* ──────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  :root {
+    --app-max-width: 460px;
+  }
+
+  body {
+    background:
+      radial-gradient(1100px 640px at 50% -12%, rgba(0, 51, 160, 0.07), transparent 60%),
+      radial-gradient(900px 520px at 108% 112%, rgba(192, 0, 31, 0.06), transparent 55%),
+      var(--body-bg);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  /* Float the app as a crisp panel with a soft shadow + hairline edges. */
+  .app-shell {
+    box-shadow:
+      0 0 0 1px rgba(26, 26, 26, 0.06),
+      0 24px 70px -28px rgba(0, 0, 0, 0.38);
+  }
+
+  /* Keep the fixed bars flush with the panel's vertical edges. */
+  .app-header,
+  .bottom-nav {
+    box-shadow: 0 0 0 1px rgba(26, 26, 26, 0.05);
+  }
+
+  /* A little more breathing room on wider screens without stretching layouts. */
+  .page-content {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+@media (min-width: 640px) {
+  html.dark body {
+    background:
+      radial-gradient(1100px 640px at 50% -12%, rgba(0, 51, 160, 0.16), transparent 60%),
+      radial-gradient(900px 520px at 108% 112%, rgba(192, 0, 31, 0.14), transparent 55%),
+      #050505;
+    background-attachment: fixed;
+  }
+
+  html.dark .app-shell {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 24px 70px -28px rgba(0, 0, 0, 0.75);
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────── */
+/* DESKTOP SIDEBAR LAYOUT (>= 1024px)                                            */
+/* The mobile top-header + bottom-nav are replaced by a fixed left rail; content */
+/* flows in the remaining space, centered at a comfortable reading width.        */
+/* ──────────────────────────────────────────────────────────────────────────── */
+.app-sidebar { display: none; }
+
+.app-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 14px;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+  color: var(--ink-black);
+  text-decoration: none;
+}
+.app-sidebar-brand .nets { color: var(--nets-red); }
+.app-sidebar-brand .quest { color: var(--nets-blue); }
+
+.app-sidebar-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+
+.app-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background 0.12s steps(2);
+}
+.app-sidebar-item:hover { background: rgba(26, 26, 26, 0.05); }
+.app-sidebar-item.active { background: color-mix(in srgb, var(--nets-red) 12%, transparent); color: var(--nets-red); }
+.app-sidebar-item .nav-icon { width: 22px; height: 22px; flex-shrink: 0; }
+
+.app-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid rgba(26, 26, 26, 0.08);
+  padding-top: 8px;
+}
+.app-sidebar-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--nets-blue); color: #fff;
+  font-size: 0.7rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.app-sidebar-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--nets-red); margin-left: auto; }
+
+html.dark .app-sidebar { border-right-color: rgba(255, 255, 255, 0.08); background: #111; }
+
+@media (min-width: 1024px) {
+  .app-sidebar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    width: var(--sidebar-width);
+    background: var(--card-bg);
+    border-right: 1px solid rgba(26, 26, 26, 0.08);
+    padding: 20px 14px;
+    z-index: 1000;
+    gap: 8px;
+  }
+
+  /* Mobile chrome off; sidebar takes over. */
+  .app-header,
+  .bottom-nav { display: none; }
+
+  .app-shell {
+    max-width: none;
+    margin: 0;
+    box-shadow: none;
+  }
+
+  /* Only reserve the rail's width when the sidebar is actually rendered — it's
+     absent on the pre-login auth + onboarding flow, so those stay full-width. */
+  .app-shell:has(.app-sidebar) {
+    padding-left: var(--sidebar-width);
+  }
+
+  /* Standard content pages: center at a readable width, no fixed-bar offsets. */
+  .page-content {
+    max-width: 760px;
+    margin: 0 auto;
+    padding-top: 32px;
+    padding-bottom: 56px;
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+
+  /* Home — wide dashboard. The header/card sections flow into a balanced
+     two-column masonry; section headers stay glued to the card beneath them. */
+  .page-content.home-page { max-width: 1060px; }
+  .home-masonry {
+    column-count: 2;
+    column-gap: 22px;
+  }
+  .home-masonry > * {
+    break-inside: avoid;
+  }
+  .home-masonry > .section-header {
+    break-after: avoid;
+  }
+
+  /* Vault — wide layout: summary + perks sit side by side, tabs span below. */
+  .page-content.vault-page { max-width: 1040px; }
 }
 

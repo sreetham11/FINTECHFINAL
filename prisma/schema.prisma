@@ -46,9 +46,11 @@ model User {
   paymentPersonalityTips        Json?               @map("payment_personality_tips")
   lastClassifiedTxCount         Int                 @default(0) @map("last_classified_tx_count")
   moodStreak                    Int                 @default(0) @map("mood_streak")
+  miles                         Int                 @default(0) // lifetime NETS Miles
 
   // Relations
   groups              GroupMember[]
+  milesLog            MilesLog[]
   createdGroups       Group[]             @relation("GroupCreator")
   expenses            Expense[]           @relation("ExpensePaidBy")
   expenseSplits       ExpenseSplit[]
@@ -71,6 +73,7 @@ model Group {
   currency    String      @default("SGD")
   emoji       String?
   destination String?
+  targetAmount Float?     @map("target_amount") // optional budget goal for the vault progress ring
   createdBy   String      @map("created_by")
   createdAt   DateTime    @default(now()) @map("created_at")
   memoryCache Json?       @map("memory_cache") // cached memory summaries keyed by month
@@ -192,6 +195,25 @@ model Transaction {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("transactions")
+}
+
+// ─── NETS Miles ───────────────────────────────────────────────────────────────
+
+model MilesLog {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  reason    String   // e.g. "new_merchant", "mood_checkin", "memory", "vault_settle", "overseas_txn"
+  miles     Int
+  // Idempotency key: awarding the same event twice is a no-op. Format is
+  // "<reason>:<discriminator>" e.g. "new_merchant:Mr Bean" or "mood_checkin:2026-07-02".
+  eventKey  String   @map("event_key")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventKey])
+  @@index([userId, createdAt])
+  @@map("miles_log")
 }
 
 // ─── Overseas Sessions ────────────────────────────────────────────────────────

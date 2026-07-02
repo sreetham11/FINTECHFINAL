@@ -4,6 +4,7 @@ import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
 import { anthropic } from '@ai-sdk/anthropic';
 import { streamText } from 'ai';
+import { awardMiles } from '@/lib/award-miles';
 
 const MoodSchema = z.object({
   mood: z.enum(['STRESSED', 'NEUTRAL', 'CONFIDENT', 'EXCITED']),
@@ -90,6 +91,13 @@ export async function POST(req: Request) {
       where: { id: user.id },
       data: { moodStreak: newStreak },
     });
+
+    // +5 NETS Miles for the daily mood check-in (once per calendar day).
+    try {
+      await awardMiles(user.id, 'mood_checkin', new Date().toISOString().slice(0, 10));
+    } catch (e) {
+      console.error('miles awarding (mood) failed:', e);
+    }
 
     // 6. Stream AI insight using Vercel AI SDK
     const moodTrend = recentMoods.map(m => m.mood).join(' → ');

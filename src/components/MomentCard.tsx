@@ -1,100 +1,171 @@
 'use client';
 
-import { useState } from 'react';
 import { Transaction } from '@/data/transactions';
 import { getFriendsByIds } from '@/data/friends';
-import { formatCurrency, formatDate, formatTime, getRandomRotation, getCategoryColor } from '@/lib/utils';
+import { formatCurrency, formatDate, formatTime, getRandomRotation } from '@/lib/utils';
+import {
+  MEMORY_CATEGORY_COLOR,
+  MEMORY_CATEGORY_LABEL,
+  spendContextLabel,
+  toMemoryCategory,
+} from '@/lib/memory';
 import Typewriter from '@/components/Typewriter';
 
 interface MomentCardProps {
-  variant?: "default" | "red";
+  variant?: 'default' | 'red';
   transaction: Transaction;
   index: number;
   showRotation?: boolean;
+  /** Explorer tier: memory cards render greyscale until Adventurer is unlocked. */
+  dimmed?: boolean;
 }
 
-export default function MomentCard({ transaction, index, showRotation = true, variant = "default" }: MomentCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function MomentCard({ transaction, index, showRotation = true, dimmed = false }: MomentCardProps) {
   const friends = getFriendsByIds(transaction.friendIds);
   const rotation = showRotation ? getRandomRotation(index) : 0;
-  const categoryColor = getCategoryColor(transaction.category);
 
-  const shadowColors = ['#C0001F', '#0033A0', '#FF2D87', '#F5C800', '#1A1A1A'];
-  const shadowColor = shadowColors[index % shadowColors.length];
-  let cardClass = "";
-  if (variant === "red" || shadowColor === '#C0001F') cardClass = "card-red surface-red";
-  else if (shadowColor === '#0033A0') cardClass = "card-blue surface-blue";
-  else if (shadowColor === '#1A1A1A') cardClass = "card-dark surface-dark";
-  else if (shadowColor === '#FF2D87') cardClass = "card-pink surface-pink";
-  else if (shadowColor === '#F5C800') cardClass = "card-yellow surface-yellow";
+  // Card is themed by its memory category (Step 5).
+  const memCategory = toMemoryCategory(transaction.category, transaction.isOverseas);
+  const cardColor = MEMORY_CATEGORY_COLOR[memCategory];
+  // Entertainment (dirty yellow) is a light background — use ink text for contrast.
+  const textColor = memCategory === 'entertainment' ? '#1A1A1A' : '#FFFFFF';
+  const subtleColor = memCategory === 'entertainment' ? 'rgba(26,26,26,0.65)' : 'rgba(255,255,255,0.75)';
+
+  const contextLabel = transaction.spendContext ? spendContextLabel(transaction.spendContext) : null;
+  const visitCount = transaction.visitCount ?? 0;
+  const showStreak = visitCount >= 3;
+
+  const stamp = (label: string, key: string) => (
+    <span
+      key={key}
+      style={{
+        fontFamily: 'var(--font-mono)',
+        fontWeight: 700,
+        fontSize: '0.58rem',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        padding: '3px 8px',
+        border: `1.5px solid ${textColor}`,
+        color: textColor,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </span>
+  );
 
   return (
     <div
-      className={`moment-card ${cardClass} animate-slide-up stagger-${Math.min(index + 1, 8)}`}
+      className={`moment-card animate-slide-up stagger-${Math.min(index + 1, 8)}`}
       style={{
+        position: 'relative',
+        background: cardColor,
+        color: textColor,
+        border: '2.5px solid #1A1A1A',
+        padding: '18px 16px 16px',
+        marginBottom: '16px',
         transform: `rotate(${rotation}deg)`,
+        filter: dimmed ? 'grayscale(1) opacity(0.9)' : undefined,
       }}
-      onClick={() => setExpanded(!expanded)}
     >
+      {/* offset shadow block */}
       <div
         style={{
-          content: '',
           position: 'absolute',
           top: '4px',
           left: '4px',
           right: '-4px',
           bottom: '-4px',
-          background: shadowColor,
+          background: '#0A0A0A',
           zIndex: -1,
         }}
       />
 
-      <div className="moment-card-header">
-        <div>
-          <div className="moment-merchant">{transaction.merchant}</div>
-          <div className="moment-meta" style={{ marginTop: '6px' }}>
-            <span className="stamp-tag stamp-tag-outline" style={{ borderColor: categoryColor, color: categoryColor }}>
-              {transaction.area}
-            </span>
-            <span className="text-mono moment-timestamp" style={{ color: '#999' }}>
-              {formatDate(transaction.date)} · {formatTime(transaction.time)}
-            </span>
+      {/* Miles earned badge (top-left) */}
+      {typeof transaction.milesEarned === 'number' && transaction.milesEarned > 0 && (
+        <span
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '12px',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 700,
+            fontSize: '0.6rem',
+            color: '#F5C800',
+            background: '#1A1A1A',
+            padding: '2px 7px',
+            letterSpacing: '0.04em',
+          }}
+        >
+          ✦ +{transaction.milesEarned}
+        </span>
+      )}
+
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: '8px',
+          marginTop: typeof transaction.milesEarned === 'number' && transaction.milesEarned > 0 ? '18px' : 0,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.15rem', letterSpacing: '-0.01em', color: textColor }}>
+            {transaction.merchant}
+          </div>
+          <div className="text-mono" style={{ fontSize: '0.62rem', color: subtleColor, marginTop: '4px' }}>
+            {MEMORY_CATEGORY_LABEL[memCategory]} · {formatDate(transaction.date)} · {formatTime(transaction.time)}
           </div>
         </div>
-        <div className="moment-emoji">{transaction.moodEmoji}</div>
+        <div style={{ fontSize: '1.6rem', flexShrink: 0 }}>
+          {transaction.isOverseas ? '✈️' : transaction.moodEmoji}
+        </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="moment-amount" style={{ color: categoryColor }}>
-          {formatCurrency(transaction.amount)}
-          {transaction.foreignAmount && (
-            <span style={{ color: '#999', fontWeight: 400, fontSize: '0.75rem' }}>
-              {' '}({formatCurrency(transaction.foreignAmount, transaction.foreignCurrency || 'THB')})
-            </span>
-          )}
-        </div>
-        {transaction.splitAmount && (
-          <span className="stamp-tag stamp-tag-yellow surface-yellow" style={{ transform: 'rotate(2deg)' }}>
-            SPLIT {formatCurrency(transaction.splitAmount)}/ea
+      {/* Amount */}
+      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '1.6rem', marginTop: '10px', color: textColor }}>
+        {formatCurrency(transaction.amount)}
+        {transaction.foreignAmount && (
+          <span style={{ color: subtleColor, fontWeight: 400, fontSize: '0.8rem' }}>
+            {' '}({formatCurrency(transaction.foreignAmount, transaction.foreignCurrency || 'THB')})
           </span>
         )}
       </div>
 
+      {/* Stamp badges */}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', alignItems: 'center' }}>
+        {transaction.area && stamp(transaction.area, 'area')}
+        {contextLabel && stamp(contextLabel, 'context')}
+        {transaction.isNewDiscovery && stamp('🌱 First time', 'new')}
+        {showStreak && stamp(`Your ${visitCount}${ordinal(visitCount)} time 🔁`, 'streak')}
+      </div>
+
+      {/* Friends as avatar chips */}
       {friends.length > 0 && (
-        <div className="moment-friends">
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px' }}>
           {friends.map((friend) => (
             <span
               key={friend.id}
-              className="friend-tag"
-              style={{ borderColor: friend.color, color: friend.color }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.6rem',
+                fontWeight: 700,
+                padding: '2px 8px 2px 2px',
+                border: `1.5px solid ${textColor}`,
+                color: textColor,
+              }}
             >
               <span
-                className="friend-avatar-badge"
                 style={{
-                  width: '14px',
-                  height: '14px',
+                  width: '16px',
+                  height: '16px',
                   background: friend.color,
-                  color: 'white',
+                  color: '#fff',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -110,32 +181,24 @@ export default function MomentCard({ transaction, index, showRotation = true, va
         </div>
       )}
 
-      <div className="moment-memory-line">
-        &ldquo;<Typewriter text={transaction.memoryLine} />&rdquo;
-      </div>
-
-      {expanded && (
-        <div className="moment-expanded animate-slap">
-          <div className="moment-map-pin">
-            <span style={{ zIndex: 2, position: 'relative' }}>
-              📍 {transaction.location}, {transaction.area}
-            </span>
+      {/* AI one-liner */}
+      {transaction.memoryLine && (
+        <>
+          <div style={{ borderTop: `1.5px dashed ${subtleColor}`, margin: '12px 0 10px' }} />
+          <div style={{ fontStyle: 'italic', fontSize: '0.85rem', lineHeight: 1.4, color: textColor }}>
+            &ldquo;<Typewriter text={transaction.memoryLine} />&rdquo;
           </div>
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="stamp-tag surface-white" style={{ transform: 'rotate(-1deg)' }}>
-              MOOD: {transaction.mood}
-            </span>
-            <span className="stamp-tag surface-white" style={{ transform: 'rotate(2deg)' }}>
-              {transaction.category.toUpperCase()}
-            </span>
-            {transaction.isOverseas && (
-              <span className="stamp-tag stamp-tag-pink surface-pink" style={{ transform: 'rotate(-2deg)' }}>
-                OVERSEAS
-              </span>
-            )}
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
+}
+
+function ordinal(n: number): string {
+  const rem10 = n % 10;
+  const rem100 = n % 100;
+  if (rem10 === 1 && rem100 !== 11) return 'st';
+  if (rem10 === 2 && rem100 !== 12) return 'nd';
+  if (rem10 === 3 && rem100 !== 13) return 'rd';
+  return 'th';
 }

@@ -7,13 +7,15 @@ import MomentCard from '@/components/MomentCard';
 import FilterTabs from '@/components/FilterTabs';
 import { useApp } from '@/context/AppContext';
 import { t } from '@/data/translations';
+import { getTier } from '@/lib/miles';
 
 
 
 export default function MemoriesPage() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const { allTransactions, language } = useApp();
+  const { allTransactions, language, totalMiles } = useApp();
+  const memoriesDimmed = getTier(totalMiles).id === 'explorer';
 
   // Filter out non-memories first
   const memoryTransactions = allTransactions.filter(t => t.isMemory !== false);
@@ -159,7 +161,7 @@ export default function MemoriesPage() {
                 border: '2.5px solid var(--border-color)',
                 zIndex: 1,
               }} />
-              <MomentCard transaction={txn} index={index} />
+              <MomentCard transaction={txn} index={index} dimmed={memoriesDimmed} />
             </div>
           ))}
         </div>

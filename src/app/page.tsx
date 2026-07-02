@@ -6,7 +6,23 @@ import type { Transaction } from '@/data/transactions';
 import MomentCard from '@/components/MomentCard';
 import CountUp from '@/components/CountUp';
 import SimulatePayment, { SimulationResult } from '@/components/SimulatePayment';
+import MemorySheet from '@/components/MemorySheet';
 import { t } from '@/data/translations';
+import { getActiveVault } from '@/data/vaults';
+import { getFriendsByIds } from '@/data/friends';
+import {
+  fallbackCaption,
+  getDayOfWeek,
+  getGroupSize,
+  getTimeOfDay,
+  spendContextLabel,
+  toMemoryCategory,
+  MEMORY_CATEGORY_LABEL,
+  TIME_OF_DAY_LABEL,
+  type MemoryContext,
+  type SpendContext,
+} from '@/lib/memory';
+import { getTier, getTierProgress, summarizeMiles, type Tier } from '@/lib/miles';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -93,6 +109,12 @@ const topUpTransactions: (Transaction & { isTopUp?: boolean; isCredit?: boolean 
   },
 ];
 
+// NETS wallet balance is a real running total, persisted across refreshes.
+// Starts from the loaded wallet amount, then every simulated payment subtracts
+// and every top-up adds to it.
+const STARTING_BALANCE = 500;
+const BALANCE_STORAGE_KEY = 'nets-quest-balance';
+
 const CATEGORY_EMOJI: Record<string, string> = {
   hawker: '🍜',
   cafe: '☕',
@@ -108,13 +130,63 @@ export default function HomePage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
-  const [balance, setBalance] = useState(247.80);
+  const [balance, setBalance] = useState(STARTING_BALANCE);
+  const [balanceReady, setBalanceReady] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState<number | null>(null);
   const [customTopUp, setCustomTopUp] = useState('');
   const [localTopUps, setLocalTopUps] = useState<typeof topUpTransactions>([]);
 
-  const { hasOnboarded, allTransactions, addTransaction, personality, language, userName } = useApp();
+  const [pendingPayment, setPendingPayment] = useState<SimulationResult | null>(null);
+  const [milesToast, setMilesToast] = useState<string | null>(null);
+  const [tierUp, setTierUp] = useState<Tier | null>(null);
+
+  const {
+    hasOnboarded,
+    allTransactions,
+    addTransaction,
+    personality,
+    language,
+    userName,
+    recordMemory,
+    recordTopUp,
+    totalMiles,
+    syncMilesFromServer,
+    updateTransaction,
+  } = useApp();
+
+  const tier = getTier(totalMiles);
+  const tierProgress = getTierProgress(totalMiles);
+
+  // Fire-and-forget: fetch an AI one-liner and patch the saved memory once it
+  // returns. Falls back silently to the deterministic caption already shown.
+  const fetchCaption = (ctx: MemoryContext, friendNames: string[]) => {
+    fetch('/api/generate-caption', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        merchant: ctx.merchant,
+        category: MEMORY_CATEGORY_LABEL[ctx.category],
+        amount: ctx.amount,
+        friends: friendNames,
+        location: ctx.area,
+        timeOfDay: TIME_OF_DAY_LABEL[ctx.timeOfDay],
+        day: ctx.dayOfWeek,
+        visitCount: ctx.visitCount,
+        spendContext: spendContextLabel(ctx.spendContext),
+        note: ctx.note,
+        foreignCurrency: ctx.foreignCurrency,
+        fallback: fallbackCaption(ctx, friendNames),
+      }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.caption) updateTransaction(ctx.paymentId, { memoryLine: d.caption });
+      })
+      .catch(() => {
+        /* keep the fallback caption */
+      });
+  };
   const router = useRouter();
   
   useEffect(() => {
@@ -123,45 +195,90 @@ export default function HomePage() {
     }
   }, [hasOnboarded, router]);
 
+  // Reconcile the header with the DB-backed miles total (source of truth). Picks
+  // up seeded demo totals and miles earned from real events (mood/settle/scan).
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/miles')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d || typeof d.total !== 'number') return;
+        const { tierUp: newTier } = syncMilesFromServer(d.total);
+        if (newTier) {
+          setTierUp(newTier);
+          setTimeout(() => setTierUp(null), 2000);
+        }
+      })
+      .catch(() => {
+        /* not logged in / offline — keep local mock total */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [syncMilesFromServer]);
+
+  // Load the persisted wallet balance on mount (defaults to STARTING_BALANCE).
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(BALANCE_STORAGE_KEY);
+      if (stored !== null) {
+        const parsed = parseFloat(stored);
+        if (!Number.isNaN(parsed)) setBalance(parsed);
+      }
+    } catch {
+      // localStorage unavailable — fall back to the in-memory default.
+    }
+    setBalanceReady(true);
+  }, []);
+
+  // Persist the running balance whenever it changes (after the initial load,
+  // so we never clobber a stored value with the default).
+  useEffect(() => {
+    if (!balanceReady) return;
+    try {
+      localStorage.setItem(BALANCE_STORAGE_KEY, balance.toString());
+    } catch {
+      // Ignore storage write failures (e.g. private mode quota).
+    }
+  }, [balance, balanceReady]);
+
   const latestTransaction = allTransactions[0];
+
+  // ── Spending forecast (derived from real spending, not hardcoded) ──
+  // Sum every transaction (including simulated payments), work out the average
+  // daily rate over the period the transactions span, and project that across a
+  // 30-day month. This moves as soon as the user simulates a payment.
+  const spentSoFar = allTransactions.reduce((sum, txn) => sum + txn.amount, 0);
+  const txnTimes = allTransactions
+    .map((txn) => new Date(txn.date).getTime())
+    .filter((ms) => !Number.isNaN(ms));
+  const spanDays =
+    txnTimes.length > 1
+      ? Math.max(1, Math.round((Math.max(...txnTimes) - Math.min(...txnTimes)) / 86_400_000) + 1)
+      : 1;
+  const projectedMonthlySpend = Math.round((spentSoFar / spanDays) * 30);
+  const activeVault = getActiveVault();
+  const vaultRemaining = activeVault
+    ? Math.max(0, Math.round(activeVault.targetAmount - activeVault.collectedAmount))
+    : 0;
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const showMilesToast = (msg: string) => {
+    setMilesToast(msg);
+    setTimeout(() => setMilesToast(null), 2500);
+  };
+
+  // Payment confirmed: charge the wallet + persist, then open the memory sheet
+  // so the user can add one bit of context (or ignore it and let it auto-save).
   const handleSimulate = (result: SimulationResult) => {
-    const isSocial = false;
-    const isOverseas = result.category === 'overseas';
-    const isFirstTime = !allTransactions.some(t => t.merchant === result.merchant);
-    const isHighEmotion = ['happy', 'guilty', 'impulsive'].includes(result.mood);
-    const isLargeSpend = result.amount > 20;
-
-    const isMemory = isSocial || isOverseas || isFirstTime || isHighEmotion || isLargeSpend;
-
     setLastSimulation(result);
     setBalance(prev => prev - result.amount);
-    
-    // Save to local Zustand state
-    addTransaction({
-      id: `sim-${Date.now()}`,
-      merchant: result.merchant,
-      category: result.category as Transaction['category'],
-      amount: result.amount,
-      currency: 'SGD',
-      location: 'Singapore',
-      area: 'Local',
-      date: new Date().toISOString().split('T')[0],
-      time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
-      friendIds: [],
-      mood: result.mood,
-      moodEmoji: result.moodEmoji,
-      memoryLine: result.budgetCoachLine,
-      isOverseas: false,
-      isMemory,
-    });
 
-    // Persist to PostgreSQL database
+    // Persist the raw transaction to PostgreSQL.
     fetch('/api/transactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -173,8 +290,78 @@ export default function HomePage() {
       }),
     }).catch(err => console.error('Failed to persist transaction:', err));
 
-    setToastMessage(isMemory ? '✨ Memory saved' : '📊 Added to your spending story');
-    setTimeout(() => setToastMessage(null), 3500);
+    setShowSimulate(false);
+    setPendingPayment(result);
+  };
+
+  // Sheet resolved: build the full memory context, award NETS Miles, and save.
+  const handleMemoryResolve = (spendContext: SpendContext, note: string) => {
+    const result = pendingPayment;
+    setPendingPayment(null);
+    if (!result) return;
+
+    const now = new Date();
+    const date = now.toISOString().split('T')[0];
+    const time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    const isOverseas = result.category === 'overseas';
+    const priorVisits = allTransactions.filter(txn => txn.merchant === result.merchant).length;
+
+    const ctx: MemoryContext = {
+      paymentId: `sim-${now.getTime()}`,
+      merchant: result.merchant,
+      category: toMemoryCategory(result.category as Transaction['category'], isOverseas),
+      amount: result.amount,
+      currency: 'SGD',
+      date,
+      time,
+      dayOfWeek: getDayOfWeek(date),
+      timeOfDay: getTimeOfDay(time),
+      friendIds: [],
+      groupSize: getGroupSize(0),
+      area: 'Singapore',
+      isOverseas,
+      isNewDiscovery: priorVisits === 0,
+      visitCount: priorVisits + 1,
+      spendContext,
+      note,
+    };
+
+    // Award miles first (reads store state before the new txn is added).
+    const { qualifies, miles, tierUp: newTier } = recordMemory(ctx);
+
+    addTransaction({
+      id: ctx.paymentId,
+      merchant: ctx.merchant,
+      category: result.category as Transaction['category'],
+      amount: ctx.amount,
+      currency: 'SGD',
+      location: 'Singapore',
+      area: ctx.area,
+      date,
+      time,
+      friendIds: [],
+      mood: result.mood,
+      moodEmoji: result.moodEmoji,
+      memoryLine: fallbackCaption(ctx, []),
+      isOverseas,
+      isMemory: qualifies,
+      spendContext,
+      note: note || undefined,
+      isNewDiscovery: ctx.isNewDiscovery,
+      visitCount: ctx.visitCount,
+      timeOfDay: ctx.timeOfDay,
+      milesEarned: miles.total,
+    });
+
+    // Only memories get an AI one-liner.
+    if (qualifies) fetchCaption(ctx, []);
+
+    if (miles.total > 0) showMilesToast(summarizeMiles(miles));
+    if (newTier) {
+      setTierUp(newTier);
+      setTimeout(() => setTierUp(null), 2000);
+    }
+    showToast(qualifies ? '✨ Memory saved' : '📊 Added to your spending story');
   };
 
   const handleTopUpConfirm = () => {
@@ -202,6 +389,14 @@ export default function HomePage() {
       isCredit: true,
     };
     setLocalTopUps(prev => [newTopUp, ...prev]);
+
+    // Award NETS ecosystem miles for topping up via PayNow.
+    const { miles, tierUp: newTier } = recordTopUp(newTopUp.id, newTopUp.date);
+    if (miles.total > 0) showMilesToast(summarizeMiles(miles));
+    if (newTier) {
+      setTierUp(newTier);
+      setTimeout(() => setTierUp(null), 2000);
+    }
 
     // Persist top-up credit transaction to database
     fetch('/api/transactions', {
@@ -268,24 +463,64 @@ export default function HomePage() {
         const data = await res.json();
         
         if (data.amount) {
+          const now = new Date();
+          const vDate = now.toISOString().split('T')[0];
+          const vTime = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+          const vId = `voice-${now.getTime()}`;
+          const friendIds: string[] = data.friendIds || [];
+          const priorVisits = allTransactions.filter(txn => txn.merchant === data.merchant).length;
+
+          // Voice payments auto-save with the default "Worth It" context.
+          const vCtx: MemoryContext = {
+            paymentId: vId,
+            merchant: data.merchant,
+            category: toMemoryCategory(data.category as Transaction['category'], false),
+            amount: data.amount,
+            currency: 'SGD',
+            date: vDate,
+            time: vTime,
+            dayOfWeek: getDayOfWeek(vDate),
+            timeOfDay: getTimeOfDay(vTime),
+            friendIds,
+            groupSize: getGroupSize(friendIds.length),
+            area: 'Singapore',
+            isOverseas: false,
+            isNewDiscovery: priorVisits === 0,
+            visitCount: priorVisits + 1,
+            spendContext: 'worth_it',
+          };
+          const { qualifies, miles, tierUp: newTier } = recordMemory(vCtx);
+          const friendNames = getFriendsByIds(friendIds).map((f) => f.name);
+
           addTransaction({
-            id: `voice-${Date.now()}`,
+            id: vId,
             merchant: data.merchant,
             category: data.category,
             amount: data.amount,
             currency: 'SGD',
             location: 'Singapore',
-            area: 'Local',
-            date: new Date().toISOString().split('T')[0],
-            time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
-            friendIds: data.friendIds || [],
+            area: 'Singapore',
+            date: vDate,
+            time: vTime,
+            friendIds,
             mood: data.mood || 'happy',
             moodEmoji: '🎙️',
-            memoryLine: `Voice added: "${transcript}"`,
+            memoryLine: fallbackCaption(vCtx, friendNames),
             isOverseas: false,
-            isMemory: true
+            isMemory: qualifies,
+            spendContext: 'worth_it',
+            isNewDiscovery: vCtx.isNewDiscovery,
+            visitCount: vCtx.visitCount,
+            timeOfDay: vCtx.timeOfDay,
+            milesEarned: miles.total,
           });
+          if (qualifies) fetchCaption(vCtx, friendNames);
           setBalance(prev => prev - data.amount);
+          if (miles.total > 0) showMilesToast(summarizeMiles(miles));
+          if (newTier) {
+            setTierUp(newTier);
+            setTimeout(() => setTierUp(null), 2000);
+          }
           showToast(`Added ${data.merchant} via Voice!`);
           setVoiceTranscript(null);
         } else {
@@ -322,19 +557,42 @@ export default function HomePage() {
   const recentTransactions = allWithCredits.slice(0, 4);
 
   return (
-    <div className="page-content">
+    <div className="page-content home-page">
       {/* Tagline */}
       <div className="animate-slap" style={{ margin: '20px 0 8px' }}>
         <div
           className="text-display"
           style={{
             fontSize: '2.4rem',
-            lineHeight: '0.9',
-            overflow: 'hidden',
+            lineHeight: '1',
           }}
         >
-          GM, {userName}! 👋<br />
-          {t('home.tagline2', language)}<br />
+          GM, {userName}! 👋
+          {tier.id === 'legend' && (
+            <span
+              className="legend-shimmer"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 800,
+                fontSize: '0.6rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#1A1A1A',
+                background: '#F5C800',
+                border: '2px solid #1A1A1A',
+                boxShadow: '2px 2px 0 0 #1A1A1A',
+                padding: '2px 8px',
+                marginLeft: '10px',
+                transform: 'rotate(-2deg)',
+                display: 'inline-block',
+                verticalAlign: 'middle',
+              }}
+            >
+              ★ NETS Legend
+            </span>
+          )}
+          <br />
+          {t('home.tagline1', language)} {t('home.tagline2', language)}{' '}
           <span className="text-red">{t('home.tagline3', language)}</span>
         </div>
       </div>
@@ -349,6 +607,7 @@ export default function HomePage() {
         </span>
       </div>
 
+      <div className="home-masonry">
       {/* ──────────────────────────────────────── */}
       {/* NETS CARD WIDGET                        */}
       {/* ──────────────────────────────────────── */}
@@ -440,6 +699,70 @@ export default function HomePage() {
             marginTop: '2px',
           }}>
             SGD
+          </div>
+        </div>
+
+        {/* NETS Miles + tier badge — stamp/sticker treatment */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 700,
+            fontSize: '0.72rem',
+            color: '#F5C800',
+            letterSpacing: '0.04em',
+          }}>
+            ✦ {totalMiles.toLocaleString()} NETS Miles
+          </div>
+          <span
+            className={tier.id === 'legend' ? 'legend-shimmer' : undefined}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 800,
+              fontSize: '0.55rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              padding: '4px 10px',
+              color: tier.id === 'legend' ? '#1A1A1A' : '#fff',
+              background: tier.color,
+              border: '2px solid #F7F4EF',
+              boxShadow: '2px 2px 0 0 rgba(0,0,0,0.55)',
+              transform: 'rotate(-2deg)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            {tier.id === 'legend' ? '★ ' : ''}{tier.label}
+          </span>
+        </div>
+
+        {/* Distance-to-next-tier progress bar (thick-bordered) */}
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{
+            height: '14px',
+            border: '2px solid #F7F4EF',
+            background: 'rgba(255,255,255,0.10)',
+            position: 'relative',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              width: `${Math.round(tierProgress.fraction * 100)}%`,
+              background: tier.id === 'legend' ? '#F5C800' : tier.color,
+              transition: 'width 0.2s steps(6)',
+            }} />
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.55rem',
+            color: 'rgba(255,255,255,0.75)',
+            marginTop: '4px',
+            letterSpacing: '0.06em',
+          }}>
+            {tierProgress.nextTier
+              ? `${tierProgress.milesToNext} miles to ${tierProgress.nextTier.label.toUpperCase()}`
+              : 'TOP TIER — NETS LEGEND'}
           </div>
         </div>
 
@@ -662,7 +985,7 @@ export default function HomePage() {
           <div className="section-header animate-slide-up stagger-3">
             {t('home.latestMoment', language)}
           </div>
-          <MomentCard transaction={latestTransaction} index={0} showRotation={false} variant="red" />
+          <MomentCard transaction={latestTransaction} index={0} showRotation={false} variant="red" dimmed={tier.id === 'explorer'} />
         </>
       )}
 
@@ -692,7 +1015,12 @@ export default function HomePage() {
           <div>
             <div className="text-display" style={{ fontSize: '1.1rem' }}>Spending Forecast</div>
             <div className="text-muted" style={{ fontSize: '0.85rem', marginTop: '4px', lineHeight: '1.4' }}>
-              At your current rate, you&apos;ll spend <strong>$380</strong> this month. Your Bangkok vault needs <strong>$88</strong> more — you&apos;ll hit it by July 3rd!
+              At your current rate, you&apos;ll spend <strong>${projectedMonthlySpend}</strong> this month.
+              {activeVault && vaultRemaining > 0 ? (
+                <> Your {activeVault.destination} vault needs <strong>${vaultRemaining}</strong> more to hit its ${activeVault.targetAmount} goal.</>
+              ) : activeVault ? (
+                <> Your {activeVault.destination} vault is fully funded! 🎉</>
+              ) : null}
             </div>
           </div>
         </div>
@@ -760,6 +1088,7 @@ export default function HomePage() {
           </button>
         </Link>
       </div>
+      </div>{/* end home-masonry */}
 
       {/* Footer barcode */}
       <div style={{ marginTop: '24px', textAlign: 'center' }}>
@@ -914,6 +1243,113 @@ export default function HomePage() {
           onClose={() => setShowSimulate(false)}
           onSimulate={handleSimulate}
         />
+      )}
+
+      {/* Post-payment memory capture sheet */}
+      {pendingPayment && (
+        <MemorySheet
+          caption={`${pendingPayment.merchant} · $${pendingPayment.amount.toFixed(2)}`}
+          onResolve={handleMemoryResolve}
+        />
+      )}
+
+      {/* NETS Miles earned toast (top — separate from the payment toast) */}
+      {milesToast && (
+        <div
+          className="animate-slide-up"
+          style={{
+            position: 'fixed',
+            top: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#1A1A1A',
+            color: '#F5C800',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 700,
+            fontSize: '0.78rem',
+            padding: '10px 18px',
+            border: '2px solid #F5C800',
+            zIndex: 1200,
+            maxWidth: '90vw',
+            textAlign: 'center',
+            boxShadow: '3px 3px 0 rgba(0,0,0,0.4)',
+          }}
+        >
+          {milesToast}
+        </div>
+      )}
+
+      {/* Tier-up celebration overlay */}
+      {tierUp && (
+        <div
+          className="animate-slap"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(10,22,40,0.96)',
+            zIndex: 4000,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            padding: '24px',
+          }}
+        >
+          {/* CSS confetti in NETS red + blue */}
+          <div className="confetti-layer" aria-hidden="true">
+            {Array.from({ length: 40 }).map((_, i) => (
+              <span
+                key={i}
+                className="confetti-piece"
+                style={{
+                  left: `${(i * 2.5) % 100}%`,
+                  background: ['#C0001F', '#0033A0', '#F5C800'][i % 3],
+                  animationDelay: `${(i % 10) * 0.12}s`,
+                  transform: `rotate(${i * 33}deg)`,
+                }}
+              />
+            ))}
+          </div>
+          <div
+            className="text-mono"
+            style={{
+              color: tierUp.color,
+              letterSpacing: '0.2em',
+              fontSize: '0.7rem',
+              textTransform: 'uppercase',
+              marginBottom: '12px',
+              position: 'relative',
+            }}
+          >
+            You&apos;re now a
+          </div>
+          <div
+            className={tierUp.id === 'legend' ? 'legend-shimmer' : undefined}
+            style={{
+              fontFamily: "'Space Grotesk', var(--font-display), sans-serif",
+              fontWeight: 800,
+              fontSize: '2.6rem',
+              color: tierUp.id === 'legend' ? undefined : '#fff',
+              letterSpacing: '-0.02em',
+              position: 'relative',
+            }}
+          >
+            {tierUp.label}
+          </div>
+          <div
+            style={{
+              color: 'rgba(255,255,255,0.75)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.8rem',
+              marginTop: '12px',
+              maxWidth: '320px',
+              lineHeight: 1.5,
+            }}
+          >
+            {tierUp.unlockLine}
+          </div>
+        </div>
       )}
 
       {/* Toast Notification */}

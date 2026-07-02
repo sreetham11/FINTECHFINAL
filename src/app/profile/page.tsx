@@ -1,19 +1,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
 import { currentUser } from '@/data/user';
+import { friends } from '@/data/friends';
 import { t, languageNames } from '@/data/translations';
 import type { Language } from '@/context/AppContext';
+import { getTierProgress, MILES_EARN_RULES } from '@/lib/miles';
 
 export default function ProfilePage() {
   const { allTransactions, personality, language, setLanguage, theme, setTheme } = useApp();
-  const { userName, setUserName } = useApp();
+  const { userName, setUserName, totalMiles, lifetimeMiles } = useApp();
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(userName || currentUser.name);
   const [editBio, setEditBio] = useState('');
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [showEarnRules, setShowEarnRules] = useState(false);
+
+  const milesProgress = getTierProgress(totalMiles);
 
   // Load saved avatar on mount
   useEffect(() => {
@@ -135,14 +141,17 @@ export default function ProfilePage() {
             {allTransactions.length + 20}
           </div>
         </div>
-        <div className="zine-card" style={{ padding: '12px', textAlign: 'center' }}>
+        <Link href="/friends" className="zine-card" style={{ padding: '12px', textAlign: 'center', display: 'block', textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
           <div className="text-mono" style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>
             {t('profile.friendsCount', language)}
           </div>
           <div className="text-display" style={{ fontSize: '1.5rem', color: 'var(--dirty-yellow)' }}>
-            12
+            {friends.length}
           </div>
-        </div>
+          <div className="text-mono" style={{ fontSize: '0.5rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            tap to view →
+          </div>
+        </Link>
         <div className="zine-card" style={{ padding: '12px', textAlign: 'center' }}>
           <div className="text-mono" style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>
             {t('profile.countriesVisited', language)}
@@ -150,6 +159,106 @@ export default function ProfilePage() {
           <div className="text-display" style={{ fontSize: '1.5rem', color: 'var(--hot-pink)' }}>
             4
           </div>
+        </div>
+      </div>
+
+      {/* ── NETS MILES ── */}
+      <div className="section-header animate-slide-up stagger-2">NETS Miles</div>
+      <div
+        className="zine-card animate-slide-up stagger-2"
+        style={{ marginBottom: '24px', border: '2.5px solid var(--border-color)' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          <div>
+            <div className="text-display" style={{ fontSize: '2.6rem', lineHeight: 1, color: 'var(--nets-red)' }}>
+              {totalMiles.toLocaleString()}
+            </div>
+            <div className="text-mono" style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              miles earned
+            </div>
+          </div>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 700,
+              fontSize: '0.6rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              color: '#fff',
+              background: milesProgress.tier.color,
+            }}
+          >
+            {milesProgress.tier.label}
+          </span>
+        </div>
+
+        {/* Progress bar to next tier */}
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ height: '16px', border: '3px solid var(--border-color)', background: 'var(--card-bg)' }}>
+            <div
+              style={{
+                height: '100%',
+                width: `${Math.round(milesProgress.fraction * 100)}%`,
+                background: 'var(--nets-red)',
+                transition: 'width 0.4s ease',
+              }}
+            />
+          </div>
+          <div
+            className="text-mono"
+            style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '6px' }}
+          >
+            <span>{totalMiles.toLocaleString()} mi</span>
+            <span>{milesProgress.nextTier ? `${milesProgress.nextTier.min.toLocaleString()} mi` : 'MAX'}</span>
+          </div>
+          <div className="text-mono-bold" style={{ fontSize: '0.72rem', marginTop: '8px' }}>
+            {milesProgress.nextTier
+              ? `${milesProgress.milesToNext.toLocaleString()} miles to ${milesProgress.nextTier.label}`
+              : `Top tier reached — you're a ${milesProgress.tier.label}`}
+          </div>
+        </div>
+
+        {/* How do I earn miles? */}
+        <div className="divider-dashed" style={{ margin: '16px 0 10px' }} />
+        <button
+          onClick={() => setShowEarnRules((v) => !v)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 700,
+            fontSize: '0.72rem',
+          }}
+        >
+          How do I earn miles?
+          <span>{showEarnRules ? '−' : '+'}</span>
+        </button>
+        {showEarnRules && (
+          <ul style={{ margin: '10px 0 0', paddingLeft: '18px' }}>
+            {MILES_EARN_RULES.map((rule) => (
+              <li
+                key={rule}
+                className="text-mono"
+                style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: '5px', lineHeight: 1.4 }}
+              >
+                {rule}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Lifetime miles (never resets) */}
+        <div className="text-mono" style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '14px' }}>
+          Total Life Miles: {lifetimeMiles.toLocaleString()}
         </div>
       </div>
 

@@ -3,20 +3,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { formatCurrency, convertCurrency } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { getVaultPerks, vaultStatsFromGroup } from '@/lib/vault-perks';
 
 export default function VaultPage() {
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSGD, setShowSGD] = useState(true);
-  const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'memories'>('expenses');
+  const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'memories' | 'timeline'>('expenses');
 
   // Create Group Form State
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupDestination, setNewGroupDestination] = useState('');
-  const [newGroupTarget, setNewGroupTarget] = useState(500);
-  const [newGroupCurrency, setNewGroupCurrency] = useState('SGD');
 
   // Add Expense Form State
   const [expenseTitle, setExpenseTitle] = useState('');
@@ -41,7 +37,9 @@ export default function VaultPage() {
     try {
       const res = await fetch('/api/groups');
       if (res.status === 401) {
-        router.push('/auth/login');
+        // Not signed in / backend not configured — show the empty vault state.
+        setGroups([]);
+        setLoading(false);
         return;
       }
       const data = await res.json();
@@ -98,33 +96,6 @@ export default function VaultPage() {
       const data = await res.json();
       if (data && data.memories) {
         setMemories(data.memories);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCreateGroup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch('/api/groups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newGroupName,
-          destination: newGroupDestination,
-          targetAmount: Number(newGroupTarget),
-          currency: newGroupCurrency,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNewGroupName('');
-        setNewGroupDestination('');
-        setShowCreateModal(false);
-        // Load and select the new group
-        setSelectedGroup(data.group);
-        loadGroups();
       }
     } catch (err) {
       console.error(err);
@@ -236,14 +207,24 @@ export default function VaultPage() {
   const collectedAmount = activeVault ? activeVault.expenses?.reduce((sum: number, e: any) => sum + e.amount, 0) : 0;
   const rate = 25.5; // Dummy foreign exchange rate
 
+  // ── Group Vault perks (engagement-based, not spend/miles) ──
+  const perks = getVaultPerks(vaultStatsFromGroup(activeVault, Object.keys(memories).length));
+  // A second concurrent vault only unlocks once one of the user's vaults is Legendary.
+  const canCreateNewVault =
+    groups.length === 0 ||
+    groups.some((g) => getVaultPerks(vaultStatsFromGroup(g)).unlocks.secondVault);
+  // Currency conversion is a level-2 perk.
+  const canConvert = perks.unlocks.currencyConversion;
+  const foreignCurrency = activeVault?.currency === 'SGD' ? 'THB' : (activeVault?.currency || 'THB');
+
   const displayAmount = (amount: number) => {
-    if (showSGD) return formatCurrency(amount, 'SGD');
-    return formatCurrency(convertCurrency(amount, rate), activeVault?.currency === 'SGD' ? 'THB' : 'SGD');
+    if (showSGD || !canConvert) return formatCurrency(amount, 'SGD');
+    return formatCurrency(convertCurrency(amount, rate), foreignCurrency);
   };
 
   return (
-    <div className="page-content min-height-100dvh py-8 px-4 surface-light" style={{ background: '#F7F4EF', paddingTop: '90px', paddingBottom: '90px' }}>
-      <div className="max-w-2xl mx-auto space-y-6">
+    <div className="page-content vault-page min-height-100dvh py-8 px-4 surface-light" style={{ background: '#F7F4EF', paddingTop: '90px', paddingBottom: '90px' }}>
+      <div className="max-w-2xl lg:max-w-4xl mx-auto space-y-6">
 
         {/* Group Selector Header */}
         <div className="bg-white surface-white border-[3px] border-[#1A1A1A] p-5 box-shadow-[6px_6px_0_0_#1A1A1A] flex justify-between items-center">
@@ -280,7 +261,7 @@ export default function VaultPage() {
               Vaults help you split travel and everyday group costs dynamically using NETS and simplified billing.
             </p>
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => router.push('/vault/create')}
               className="bg-[#C0001F] text-white surface-red border-2 border-[#1A1A1A] py-2 px-6 font-space-mono text-xs font-bold uppercase hover:bg-[#A00018] shadow-[4px_4px_0_0_#1A1A1A] active:translate-x-[2px] active:translate-y-[2px]"
             >
               + Create First Vault
@@ -290,6 +271,7 @@ export default function VaultPage() {
 
         {activeVault && (
           <>
+            <div className="space-y-6 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0 lg:items-start">
             {/* Vault Summary Card */}
             <div className="bg-white surface-white border-[3px] border-[#1A1A1A] p-6 box-shadow-[6px_6px_0_0_#1A1A1A] space-y-6">
               <div className="flex justify-between items-start">
@@ -302,12 +284,23 @@ export default function VaultPage() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs font-space-mono font-bold text-[#C0001F] uppercase">
-                    SGD vs {activeVault.currency || 'THB'}
-                  </div>
-                  <div className="text-[0.65rem] font-mono text-[#777] mt-0.5">
-                    Rate: 1 SGD = {rate} {activeVault.currency || 'THB'}
-                  </div>
+                  {canConvert ? (
+                    <>
+                      <button
+                        onClick={() => setShowSGD((v) => !v)}
+                        className="text-xs font-space-mono font-bold text-white bg-[#0033A0] border-2 border-[#1A1A1A] px-2.5 py-1 uppercase shadow-[2px_2px_0_0_#1A1A1A] active:translate-x-[1px] active:translate-y-[1px]"
+                      >
+                        {showSGD ? `Show ${foreignCurrency}` : 'Show SGD'}
+                      </button>
+                      <div className="text-[0.65rem] font-mono text-[#777] mt-1">
+                        1 SGD = {rate} {foreignCurrency}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-[0.6rem] font-mono text-[#777] uppercase leading-tight max-w-[120px]">
+                      🔒 Currency convert<br />unlocks at Active Vault
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -315,7 +308,7 @@ export default function VaultPage() {
               <div className="space-y-2">
                 <div className="flex justify-between font-space-mono text-xs font-bold">
                   <span>Spent: <strong>SGD {collectedAmount.toFixed(2)}</strong></span>
-                  <span className="text-[#C0001F]">Target: <strong>SGD {activeVault.targetAmount.toFixed(2)}</strong></span>
+                  <span className="text-[#C0001F]">Target: <strong>SGD {(activeVault.targetAmount ?? 0).toFixed(2)}</strong></span>
                 </div>
                 <div className="w-full bg-[#F7F4EF] surface-light border-2 border-[#1A1A1A] h-6 relative overflow-hidden">
                   <div
@@ -328,6 +321,56 @@ export default function VaultPage() {
                 </div>
               </div>
             </div>
+
+            {/* Vault Perks Card — group engagement progression */}
+            <div className="bg-white surface-white border-[3px] border-[#1A1A1A] p-5 box-shadow-[6px_6px_0_0_#1A1A1A] space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-space-mono text-xs font-black uppercase text-[#1A1A1A]">
+                  🔓 Vault Perks
+                </h3>
+                <span
+                  className="font-space-mono text-[0.6rem] font-extrabold uppercase tracking-wider px-2.5 py-1 border-2 border-[#1A1A1A]"
+                  style={{
+                    background: perks.level.color,
+                    color: perks.level.id === 'legendary' ? '#1A1A1A' : '#fff',
+                    transform: 'rotate(-2deg)',
+                    boxShadow: '2px 2px 0 0 #1A1A1A',
+                    display: 'inline-block',
+                  }}
+                >
+                  {perks.level.id === 'legendary' ? '★ ' : ''}{perks.level.label}
+                </span>
+              </div>
+
+              {/* Engagement progress */}
+              <div className="space-y-1.5">
+                <div className="w-full bg-[#F7F4EF] border-2 border-[#1A1A1A] h-4 relative overflow-hidden">
+                  <div className="h-full" style={{ width: `${Math.round(perks.fraction * 100)}%`, background: perks.level.color, transition: 'width 0.2s steps(6)' }} />
+                </div>
+                <div className="font-space-mono text-[0.6rem] text-[#777] uppercase tracking-wide">
+                  {perks.nextLevel
+                    ? `+${perks.toNext} engagement to ${perks.nextLevel.label}`
+                    : 'Max level — Legendary Vault'}
+                </div>
+              </div>
+
+              {/* Perk checklist */}
+              <div className="grid grid-cols-1 gap-1.5 font-space-mono text-[0.65rem]">
+                {[
+                  { on: canConvert, label: 'Live currency conversion' },
+                  { on: perks.unlocks.secondVault, label: 'A second concurrent vault' },
+                  { on: perks.unlocks.sharedTimeline, label: 'Shared timeline view' },
+                ].map((p) => (
+                  <div key={p.label} className={p.on ? 'text-[#1A1A1A] font-bold' : 'text-[#999]'}>
+                    {p.on ? '✅' : '🔒'} {p.label}
+                  </div>
+                ))}
+              </div>
+              <p className="font-space-mono text-[0.55rem] text-[#999] leading-relaxed border-t-2 border-dashed border-[#1A1A1A] pt-2">
+                Vaults level up from squad engagement — expenses, settle-ups, notes & memories. Never from how much you spend.
+              </p>
+            </div>
+            </div>{/* end summary + perks grid */}
 
             {/* Navigation Tabs */}
             <div className="flex border-[3px] border-[#1A1A1A] bg-white box-shadow-[4px_4px_0_0_#1A1A1A]">
@@ -345,10 +388,18 @@ export default function VaultPage() {
               </button>
               <button
                 onClick={() => setActiveTab('memories')}
-                className={`flex-1 py-3 text-center font-space-mono text-xs font-bold uppercase ${activeTab === 'memories' ? 'bg-[#C0001F] text-white surface-red' : 'bg-white text-[#1A1A1A] surface-white'}`}
+                className={`flex-1 py-3 text-center font-space-mono text-xs font-bold uppercase ${perks.unlocks.sharedTimeline ? 'border-r-[3px] border-[#1A1A1A]' : ''} ${activeTab === 'memories' ? 'bg-[#C0001F] text-white surface-red' : 'bg-white text-[#1A1A1A] surface-white'}`}
               >
                 Memories
               </button>
+              {perks.unlocks.sharedTimeline && (
+                <button
+                  onClick={() => setActiveTab('timeline')}
+                  className={`flex-1 py-3 text-center font-space-mono text-xs font-bold uppercase ${activeTab === 'timeline' ? 'bg-[#F5C800] text-[#1A1A1A]' : 'bg-white text-[#1A1A1A] surface-white'}`}
+                >
+                  ★ Timeline
+                </button>
+              )}
             </div>
 
             {/* TAB CONTENT: EXPENSES */}
@@ -572,97 +623,77 @@ export default function VaultPage() {
                 </div>
               </div>
             )}
+
+            {/* TAB CONTENT: SHARED TIMELINE (Legendary perk) */}
+            {activeTab === 'timeline' && perks.unlocks.sharedTimeline && (
+              <div className="bg-white surface-white border-[3px] border-[#1A1A1A] p-6 box-shadow-[6px_6px_0_0_#1A1A1A] space-y-4">
+                <div>
+                  <h3 className="font-space-mono text-xs font-black uppercase border-b-2 border-[#1A1A1A] pb-2">
+                    ★ Shared Vault Timeline
+                  </h3>
+                  <p className="text-[0.65rem] font-space-mono text-muted mt-1">
+                    Every expense and settle-up in this vault, newest first.
+                  </p>
+                </div>
+                {(() => {
+                  const events: { date: string; icon: string; text: string; sub: string }[] = [];
+                  (activeVault.expenses ?? []).forEach((e: any) => {
+                    events.push({
+                      date: e.createdAt,
+                      icon: '💸',
+                      text: `${e.title} — SGD ${e.amount.toFixed(2)}`,
+                      sub: `Paid by ${e.payer?.name ?? 'someone'}`,
+                    });
+                  });
+                  (activeVault.settlements ?? []).forEach((s: any) => {
+                    events.push({
+                      date: s.settledAt,
+                      icon: '🤝',
+                      text: `Settled SGD ${s.amount.toFixed(2)}`,
+                      sub: `${s.from?.name ?? 'A member'} → ${s.to?.name ?? 'a member'}`,
+                    });
+                  });
+                  events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                  if (events.length === 0) {
+                    return <p className="text-center font-space-mono text-xs text-muted py-6">Nothing logged yet — add an expense to start the timeline.</p>;
+                  }
+                  return (
+                    <div className="space-y-3">
+                      {events.map((ev, i) => (
+                        <div key={i} className="flex gap-3 items-start border-2 border-[#1A1A1A] p-3 box-shadow-[3px_3px_0_0_#1A1A1A]">
+                          <span className="text-lg">{ev.icon}</span>
+                          <div className="flex-1">
+                            <div className="font-space-mono text-xs font-bold">{ev.text}</div>
+                            <div className="font-mono text-[0.6rem] text-[#777]">{ev.sub}</div>
+                          </div>
+                          <div className="font-mono text-[0.55rem] text-[#999] whitespace-nowrap">
+                            {new Date(ev.date).toLocaleDateString('en-SG', { day: '2-digit', month: 'short' })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </>
         )}
 
-        {/* Create Vault Button */}
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="w-full bg-[#C0001F] text-white surface-red border-[3px] border-[#1A1A1A] py-3.5 px-6 font-space-mono font-bold uppercase tracking-wider text-xs hover:bg-[#A00018] box-shadow-[4px_4px_0_0_#1A1A1A] transition-all"
-        >
-          + Create New Vault
-        </button>
+        {/* Create Vault Button — a 2nd concurrent vault is a Legendary perk */}
+        {canCreateNewVault ? (
+          <button
+            onClick={() => router.push('/vault/create')}
+            className="w-full bg-[#C0001F] text-white surface-red border-[3px] border-[#1A1A1A] py-3.5 px-6 font-space-mono font-bold uppercase tracking-wider text-xs hover:bg-[#A00018] box-shadow-[4px_4px_0_0_#1A1A1A] transition-all"
+          >
+            + Create New Vault
+          </button>
+        ) : (
+          <div className="w-full bg-[#F7F4EF] text-[#555] border-[3px] border-dashed border-[#1A1A1A] py-3.5 px-6 font-space-mono font-bold uppercase tracking-wider text-[0.65rem] text-center leading-relaxed">
+            🔒 Level a vault up to <span className="text-[#F5C800]" style={{ WebkitTextStroke: '0.4px #1A1A1A' }}>Legendary</span> to open a second concurrent vault
+          </div>
+        )}
 
       </div>
-
-      {/* CREATE VAULT MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-[#00000080] flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white surface-white border-[3px] border-[#1A1A1A] p-6 max-w-md w-full box-shadow-[8px_8px_0_0_#1A1A1A]">
-            <div className="flex justify-between items-center border-b-2 border-[#1A1A1A] pb-3 mb-4">
-              <h3 className="font-outfit font-black text-lg uppercase">Create Vault🎒</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-xl font-bold font-mono">×</button>
-            </div>
-            <form onSubmit={handleCreateGroup} className="space-y-4">
-              <div>
-                <label className="block font-space-mono text-xs font-bold uppercase mb-1">
-                  Vault Name / Trip
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Bangkok Graduation Trip"
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  className="w-full bg-[#F7F4EF] surface-light border-2 border-[#1A1A1A] px-3 py-2 font-space-mono text-xs focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block font-space-mono text-xs font-bold uppercase mb-1">
-                  Destination Country
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Thailand or Malaysia"
-                  value={newGroupDestination}
-                  onChange={(e) => setNewGroupDestination(e.target.value)}
-                  className="w-full bg-[#F7F4EF] surface-light border-2 border-[#1A1A1A] px-3 py-2 font-space-mono text-xs focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block font-space-mono text-xs font-bold uppercase mb-1">
-                  Target Budget (SGD)
-                </label>
-                <input
-                  type="number"
-                  required
-                  value={newGroupTarget}
-                  onChange={(e) => setNewGroupTarget(Number(e.target.value))}
-                  className="w-full bg-[#F7F4EF] surface-light border-2 border-[#1A1A1A] px-3 py-2 font-space-mono text-xs focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block font-space-mono text-xs font-bold uppercase mb-1">
-                  Foreign Currency
-                </label>
-                <select
-                  value={newGroupCurrency}
-                  onChange={(e) => setNewGroupCurrency(e.target.value)}
-                  className="w-full bg-[#F7F4EF] surface-light border-2 border-[#1A1A1A] px-3 py-2 font-space-mono text-xs focus:outline-none"
-                >
-                  <option value="SGD">SGD (Singapore Dollar)</option>
-                  <option value="MYR">MYR (Malaysian Ringgit)</option>
-                  <option value="THB">THB (Thai Baht)</option>
-                  <option value="JPY">JPY (Japanese Yen)</option>
-                  <option value="IDR">IDR (Indonesian Rupiah)</option>
-                  <option value="VND">VND (Vietnamese Dong)</option>
-                  <option value="AUD">AUD (Australian Dollar)</option>
-                  <option value="GBP">GBP (British Pound)</option>
-                  <option value="USD">USD (US Dollar)</option>
-                </select>
-              </div>
-              <button
-                type="submit"
-                className="w-full bg-[#1A1A1A] text-white surface-dark py-3 font-space-mono font-bold uppercase tracking-wider text-xs hover:bg-[#C0001F] transition-colors"
-              >
-                Create Shared Vault
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

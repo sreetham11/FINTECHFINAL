@@ -76,7 +76,7 @@ export async function POST(
               {
                 type: 'image',
                 image: buffer,
-                mimeType: mimeType,
+                mediaType: mimeType,
               },
               {
                 type: 'text',

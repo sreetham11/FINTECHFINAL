@@ -23,10 +23,9 @@ export default function MoodPage() {
   useEffect(() => {
     fetch('/api/mood/history')
       .then(res => {
-        if (res.status === 401) {
-          router.push('/auth/login');
-          return;
-        }
+        // Not signed in (or backend not configured) — just show the empty state
+        // instead of bouncing to a login that can't complete without Supabase.
+        if (res.status === 401) return null;
         return res.json();
       })
       .then(data => {

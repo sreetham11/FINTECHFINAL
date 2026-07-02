@@ -1,10 +1,11 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-// Routes that don't require authentication
+// Routes that don't require authentication.
+// NOTE: /api/auth/register is intentionally NOT here — it derives the user from
+// the verified session, so it must run through the auth check below.
 const PUBLIC_API_ROUTES = [
   '/api/auth/callback',
-  '/api/auth/register',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -28,9 +29,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Without Supabase env configured we can't create a client. Rather than throw
+  // (which 500s the request), skip the middleware auth check and let the route
+  // handler enforce auth itself — it returns a clean 401 via getAuthUser().
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return supabaseResponse;
+  }
+
   const supabase = createServerClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {

@@ -31,10 +31,7 @@ export default function OverseasPage() {
   useEffect(() => {
     fetch('/api/overseas/active')
       .then(res => {
-        if (res.status === 401) {
-          router.push('/auth/login');
-          return;
-        }
+        if (res.status === 401) return null;
         return res.json();
       })
       .then(data => {

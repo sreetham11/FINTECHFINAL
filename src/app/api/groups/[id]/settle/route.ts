@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
+import { awardMiles } from '@/lib/award-miles';
 
 const SettleSchema = z.object({
   // Settle specific splits (by split IDs) OR settle all debts between two users
@@ -42,6 +43,7 @@ export async function POST(
           where: {
             id: { in: splitIds },
             userId: user.id, // can only settle your own splits
+            isSettled: false, // don't re-settle / double-count
             expense: { groupId: params.id },
           },
         });
@@ -49,8 +51,10 @@ export async function POST(
         totalSettled = splits.reduce((sum, s) => sum + s.amountOwed, 0);
         settledCount = splits.length;
 
+        // Only settle the caller's own splits in this group — use the ids that
+        // passed the ownership filter above, not the raw client-supplied ids.
         await tx.expenseSplit.updateMany({
-          where: { id: { in: splitIds } },
+          where: { id: { in: splits.map(s => s.id) } },
           data: { isSettled: true },
         });
       } else if (toUserId) {
@@ -95,10 +99,28 @@ export async function POST(
       }
     });
 
+    // +25 NETS Miles when this settlement clears the vault entirely (no unsettled
+    // splits remain across the whole group). Once per group vault.
+    let milesAwarded = 0;
+    if (settledCount > 0) {
+      try {
+        const remaining = await prisma.expenseSplit.count({
+          where: { isSettled: false, expense: { groupId: params.id } },
+        });
+        if (remaining === 0) {
+          const r = await awardMiles(user.id, 'vault_settle', params.id);
+          milesAwarded = r.awarded;
+        }
+      } catch (e) {
+        console.error('miles awarding (settle) failed:', e);
+      }
+    }
+
     return NextResponse.json({
       settled: true,
       settledCount,
       totalSettled: Math.round(totalSettled * 100) / 100,
+      milesAwarded,
     });
   } catch (e) {
     if (e instanceof NextResponse) return e;

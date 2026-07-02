@@ -4,18 +4,24 @@ import { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useRouter } from 'next/navigation';
 
-// Pre-computed particle configs so they don't re-randomize on every render
-const PARTICLE_CONFIGS = [
-  { size: 10, left: 8,  duration: 10, delay: 0,   isRed: true,  isCircle: true  },
-  { size: 18, left: 25, duration: 13, delay: 2,   isRed: false, isCircle: false },
-  { size: 12, left: 42, duration: 9,  delay: 4,   isRed: true,  isCircle: false },
-  { size: 22, left: 60, duration: 14, delay: 1,   isRed: false, isCircle: true  },
-  { size: 8,  left: 75, duration: 11, delay: 3,   isRed: true,  isCircle: true  },
-  { size: 16, left: 15, duration: 12, delay: 0.5, isRed: false, isCircle: false },
-  { size: 24, left: 88, duration: 15, delay: 2.5, isRed: true,  isCircle: true  },
-  { size: 14, left: 50, duration: 8,  delay: 4.5, isRed: false, isCircle: true  },
-  { size: 20, left: 35, duration: 10, delay: 1.5, isRed: true,  isCircle: false },
-  { size: 11, left: 70, duration: 13, delay: 3.5, isRed: false, isCircle: true  },
+const SQUAD = ['Kai', 'Priya', 'Manoj', 'Wei'];
+
+const STEPS = [
+  {
+    kicker: "Let's set you up",
+    title: ['What’s your', 'name?'],
+    subtitle: 'We’ll use this to personalise your Quest dashboard.',
+  },
+  {
+    kicker: 'Step 2 of 3',
+    title: ['Your usual', 'squad?'],
+    subtitle: 'Pick the friends you split payments with the most.',
+  },
+  {
+    kicker: 'Almost there',
+    title: ['Your go-to', 'spot?'],
+    subtitle: 'Your most frequented hawker or café.',
+  },
 ];
 
 export default function OnboardingPage() {
@@ -23,7 +29,7 @@ export default function OnboardingPage() {
   const [tempName, setTempName] = useState('');
   const [tempFriends, setTempFriends] = useState<string[]>([]);
   const [tempMerchant, setTempMerchant] = useState('');
-  
+
   const { setHasOnboarded, setUserName, setFrequentMerchant } = useApp();
   const router = useRouter();
 
@@ -38,132 +44,154 @@ export default function OnboardingPage() {
     }
   };
 
-  const toggleFriend = (f: string) => {
-    if (tempFriends.includes(f)) {
-      setTempFriends(tempFriends.filter(x => x !== f));
-    } else {
-      setTempFriends([...tempFriends, f]);
-    }
-  };
+  const canAdvance = step === 1 ? tempName.trim().length > 0 : true;
+
+  const toggleFriend = (f: string) =>
+    setTempFriends((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
+
+  const meta = STEPS[step - 1];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh', padding: '20px', background: '#F7F4EF', paddingBottom: '80px', position: 'relative', overflow: 'auto', overflowX: 'hidden' }}>
-      
-      {/* Floating particle animation — pure CSS */}
-      <style>{`
-        @keyframes onb-float {
-          0%   { transform: translateY(0) rotate(0deg);    opacity: 0; }
-          10%  { opacity: 1; }
-          90%  { opacity: 1; }
-          100% { transform: translateY(-110vh) rotate(360deg); opacity: 0; }
-        }
-      `}</style>
+    <div className="auth-screen">
+      {/* Collage stickers behind the card */}
+      <div className="auth-blob" style={{ top: '10%', left: '6%', width: 64, height: 64, background: 'var(--nets-blue)', transform: 'rotate(10deg)' }} />
+      <div className="auth-blob" style={{ bottom: '12%', right: '8%', width: 88, height: 38, background: 'var(--dirty-yellow)', border: '3px solid var(--ink-black)', transform: 'rotate(-7deg)' }} />
 
-      {/* 10 particles — deterministic configs, no Math.random() in render */}
-      {PARTICLE_CONFIGS.map((p, i) => (
-        <div
-          key={i}
-          style={{
-            position: 'absolute',
-            bottom: '-30px',
-            left: `${p.left}%`,
-            width: `${p.size}px`,
-            height: `${p.size}px`,
-            background: p.isRed ? '#C0001F' : '#0033A0',
-            opacity: 0,
-            borderRadius: p.isCircle ? '50%' : '4px',
-            pointerEvents: 'none',
-            zIndex: 0,
-            animation: `onb-float ${p.duration}s linear ${p.delay}s infinite`,
-          }}
-        />
-      ))}
-
-      {/* Content layer sits on top */}
-      <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <div style={{ textAlign: 'center', marginTop: '20px', marginBottom: '20px' }}>
-          <div style={{ fontWeight: 900, fontSize: '1.5rem', color: 'var(--nets-red)', letterSpacing: '-1px' }}>
-            NETS <span style={{ color: 'var(--nets-blue)' }}>QUEST</span>
+      <div className="onb-layout">
+        {/* Desktop-only brand / hero panel */}
+        <aside className="onb-hero">
+          <div className="onb-hero-brand">
+            <span className="nets">NETS</span> <span className="quest">QUEST</span>
           </div>
+          <div className="onb-hero-title">
+            Your money,<br />but make it a <span className="accent">story.</span>
+          </div>
+          <p className="onb-hero-sub">
+            Set up in 30 seconds. Then every tap becomes a memory, a split, or a step up the NETS Miles ladder.
+          </p>
+          <div className="onb-hero-list">
+            <div className="onb-hero-item"><span>🧾</span><span>Split trips &amp; bills in seconds</span></div>
+            <div className="onb-hero-item"><span>✨</span><span>Turn payments into memories</span></div>
+            <div className="onb-hero-item"><span>🎟️</span><span>Earn NETS Miles as you go</span></div>
+          </div>
+        </aside>
+
+        <div className="auth-card-wrap">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+          <span className="auth-stamp">NETS Quest</span>
+          <span className="auth-stamp" style={{ background: 'var(--nets-blue)', color: '#fff', transform: 'rotate(4deg)' }}>Step {step} / 3</span>
         </div>
 
-        <div style={{ display: 'flex', gap: '4px', marginBottom: '40px' }}>
-          {[1, 2, 3].map(i => (
-            <div key={i} style={{ flex: 1, height: '4px', background: step >= i ? 'var(--nets-red)' : '#ccc' }} />
-          ))}
-        </div>
-
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          {step === 1 && (
-            <div className="animate-slide-up">
-              <div className="text-display" style={{ fontSize: '2rem', marginBottom: '8px' }}>What&apos;s your name?</div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>We&apos;ll use this to personalise your Quest dashboard.</div>
-              <input 
-                autoFocus
-                type="text" 
-                value={tempName} 
-                onChange={e => setTempName(e.target.value)} 
-                placeholder="e.g. Sree"
-                className="surface-white"
+        <div className="auth-card onb-card">
+          {/* Progress bar */}
+          <div style={{ display: 'flex', gap: 5, marginBottom: 16 }}>
+            {[1, 2, 3].map((i) => (
+              <span
+                key={i}
                 style={{
-                  width: '100%', padding: '16px', fontSize: '1.2rem', fontFamily: 'inherit',
-                  border: '2.5px solid var(--ink-black)', borderRadius: '12px'
+                  flex: 1,
+                  height: 5,
+                  border: '2px solid var(--ink-black)',
+                  background: step >= i ? 'var(--nets-red)' : 'transparent',
+                  transition: 'background 0.1s steps(2)',
                 }}
+              />
+            ))}
+          </div>
+
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.16em', color: 'var(--nets-red)', textTransform: 'uppercase' }}>
+            {meta.kicker}
+          </div>
+          <h1 className="auth-headline">
+            {meta.title[0]}<br /><span className="accent">{meta.title[1]}</span>
+          </h1>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'color-mix(in srgb, var(--ink-black) 65%, transparent)', marginTop: -4, marginBottom: 18, lineHeight: 1.5 }}>
+            {meta.subtitle}
+          </p>
+
+          {step === 1 && (
+            <div>
+              <label className="auth-label" htmlFor="onb-name">Your name</label>
+              <input
+                id="onb-name"
+                autoFocus
+                type="text"
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                placeholder="e.g. Sree"
+                className="auth-input"
+                onKeyDown={(e) => { if (e.key === 'Enter' && canAdvance) handleNext(); }}
               />
             </div>
           )}
 
           {step === 2 && (
-            <div className="animate-slide-up">
-              <div className="text-display" style={{ fontSize: '2rem', marginBottom: '8px' }}>Who&apos;s your usual squad?</div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Pick the friends you split payments with the most.</div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                {['Kai', 'Priya', 'Manoj', 'Wei'].map(friend => (
-                  <div 
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {SQUAD.map((friend) => {
+                const selected = tempFriends.includes(friend);
+                return (
+                  <button
                     key={friend}
+                    type="button"
                     onClick={() => toggleFriend(friend)}
-                    className={tempFriends.includes(friend) ? 'surface-red' : 'surface-white'}
                     style={{
-                      padding: '16px', border: '2.5px solid var(--ink-black)', borderRadius: '12px',
-                      textAlign: 'center', fontWeight: 900, cursor: 'pointer',
-                      transition: 'all 0.2s'
+                      padding: '14px',
+                      border: '2.5px solid var(--ink-black)',
+                      background: selected ? 'var(--nets-blue)' : 'var(--off-white)',
+                      color: selected ? '#fff' : 'var(--ink-black)',
+                      fontFamily: 'var(--font-display)',
+                      fontWeight: 800,
+                      fontSize: '0.95rem',
+                      cursor: 'pointer',
+                      boxShadow: selected ? '3px 3px 0 0 var(--ink-black)' : 'none',
+                      transform: selected ? 'translate(-1px,-1px)' : 'none',
+                      transition: 'transform 0.08s steps(2), box-shadow 0.08s steps(2)',
                     }}
                   >
                     {friend}
-                  </div>
-                ))}
-              </div>
+                  </button>
+                );
+              })}
             </div>
           )}
 
           {step === 3 && (
-            <div className="animate-slide-up">
-              <div className="text-display" style={{ fontSize: '2rem', marginBottom: '8px' }}>Where&apos;s your go-to spot?</div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Your most frequented hawker or cafe.</div>
-              <input 
+            <div>
+              <label className="auth-label" htmlFor="onb-merchant">Go-to spot</label>
+              <input
+                id="onb-merchant"
                 autoFocus
-                type="text" 
-                value={tempMerchant} 
-                onChange={e => setTempMerchant(e.target.value)} 
+                type="text"
+                value={tempMerchant}
+                onChange={(e) => setTempMerchant(e.target.value)}
                 placeholder="e.g. Maxwell Food Centre"
-                className="surface-white"
-                style={{
-                  width: '100%', padding: '16px', fontSize: '1.2rem', fontFamily: 'inherit',
-                  border: '2.5px solid var(--ink-black)', borderRadius: '12px'
-                }}
+                className="auth-input"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleNext(); }}
               />
             </div>
           )}
-        </div>
 
-        <button 
-          className="btn-primary animate-slap" 
-          onClick={handleNext}
-          style={{ width: '100%', padding: '16px', fontSize: '1.2rem', marginTop: '40px' }}
-        >
-          {step === 3 ? "Let's Go 🚀" : "Next"}
-        </button>
+          <button
+            type="button"
+            className="auth-btn auth-btn-primary"
+            onClick={handleNext}
+            disabled={!canAdvance}
+            style={{ marginTop: 20 }}
+          >
+            {step === 3 ? "Let’s Go 🚀" : 'Next →'}
+          </button>
+
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={() => setStep(step - 1)}
+              style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--ink-black) 55%, transparent)' }}
+            >
+              ← Back
+            </button>
+          )}
+        </div>
+      </div>
       </div>
     </div>
   );

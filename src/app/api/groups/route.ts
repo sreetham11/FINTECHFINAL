@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 import { z } from 'zod';
+import { getVaultPerks } from '@/lib/vault-perks';
 
 const CreateGroupSchema = z.object({
   name: z.string().min(1).max(100),
@@ -9,6 +10,7 @@ const CreateGroupSchema = z.object({
   currency: z.string().length(3).default('SGD'),
   emoji: z.string().optional(),
   destination: z.string().optional(),
+  targetAmount: z.number().positive().optional(),
 });
 
 // GET /api/groups — list all groups the auth user belongs to
@@ -48,6 +50,32 @@ export async function POST(req: Request) {
     const user = await getAuthUser();
     const body = await req.json();
     const data = CreateGroupSchema.parse(body);
+
+    // Vault perk gate: everyone gets one vault. A second concurrent vault only
+    // unlocks once an existing vault becomes "Legendary" (high squad engagement).
+    const existing = await prisma.group.findMany({
+      where: { members: { some: { userId: user.id } } },
+      select: {
+        _count: { select: { expenses: true, settlements: true, members: true } },
+      },
+    });
+    if (existing.length >= 1) {
+      const anyLegendary = existing.some((g) =>
+        getVaultPerks({
+          members: g._count.members,
+          expenses: g._count.expenses,
+          settlements: g._count.settlements,
+          notes: 0,
+          memories: 0,
+        }).unlocks.secondVault
+      );
+      if (!anyLegendary) {
+        return NextResponse.json(
+          { error: 'Level up an existing vault to Legendary to unlock a second vault.' },
+          { status: 403 }
+        );
+      }
+    }
 
     const group = await prisma.group.create({
       data: {

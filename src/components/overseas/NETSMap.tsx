@@ -26,6 +26,11 @@ export default function NETSMap({ isOverseasMode = false, compact = false }: NET
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedMarker, setSelectedMarker] = useState<any>(null);
 
+  // Live NETS-accepting stores from Google Places (real coords + distances).
+  interface LiveStore { id: string; name: string; lat: number; lng: number; dist: string; tag: string; }
+  const [liveStores, setLiveStores] = useState<LiveStore[] | null>(null);
+  const [storesLoading, setStoresLoading] = useState(false);
+
   useEffect(() => {
     if (!isOverseasMode) {
       if (navigator.geolocation) {
@@ -45,7 +50,45 @@ export default function NETSMap({ isOverseasMode = false, compact = false }: NET
     }
   }, [isOverseasMode]);
 
+  // Fetch real nearby stores whenever the map re-centres (e.g. after geolocation).
+  useEffect(() => {
+    let cancelled = false;
+    setStoresLoading(true);
+    fetch(`/api/nearby-nets?lat=${center.lat}&lng=${center.lng}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled) return;
+        if (d && Array.isArray(d.stores) && d.stores.length > 0) {
+          setLiveStores(
+            d.stores.map((s: { place_id: string; name: string; lat: number; lng: number; distanceLabel: string; type: string }) => ({
+              id: s.place_id,
+              name: s.name,
+              lat: s.lat,
+              lng: s.lng,
+              dist: s.distanceLabel,
+              tag: s.type,
+            }))
+          );
+        } else {
+          setLiveStores(null); // fall back to the built-in demo pins
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLiveStores(null);
+      })
+      .finally(() => {
+        if (!cancelled) setStoresLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [center.lat, center.lng]);
+
   const merchants = useMemo(() => {
+    // Prefer real stores from Google Places when we have them.
+    if (liveStores && liveStores.length > 0) {
+      return liveStores.slice(0, compact ? 3 : liveStores.length);
+    }
     if (isOverseasMode) {
       return [
         { id: 'm1', name: '7-Eleven', lat: center.lat + 0.002, lng: center.lng + 0.001, dist: '120m away', tag: 'Convenience' },
@@ -67,7 +110,7 @@ export default function NETSMap({ isOverseasMode = false, compact = false }: NET
         { id: 'm8', name: 'Kopitiam', lat: center.lat - 0.001, lng: center.lng + 0.004, dist: '350m away', tag: 'Food' },
       ].slice(0, compact ? 3 : 8);
     }
-  }, [center, isOverseasMode, compact]);
+  }, [center, isOverseasMode, compact, liveStores]);
 
   const friends = useMemo(() => {
     if (compact) return [];
@@ -158,7 +201,13 @@ export default function NETSMap({ isOverseasMode = false, compact = false }: NET
       {!compact && (
         <div style={{ background: 'var(--ink-black)', color: '#fff', padding: '8px', textAlign: 'center' }}>
           <span className="text-mono" style={{ fontSize: '0.7rem' }}>
-            {isOverseasMode ? 'Live map • NETS accepted locations in Bangkok' : 'Live map • NETS accepted near you in Singapore'}
+            {storesLoading
+              ? 'Finding NETS stores near you…'
+              : liveStores && liveStores.length > 0
+                ? `Live • ${liveStores.length} real NETS stores near you`
+                : isOverseasMode
+                  ? 'Live map • NETS accepted locations in Bangkok'
+                  : 'Live map • NETS accepted near you in Singapore'}
           </span>
         </div>
       )}

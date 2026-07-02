@@ -4,6 +4,49 @@ import React, { useCallback, useEffect } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { transactions as baseTransactions, Transaction } from '@/data/transactions';
+import {
+  calculateMemoryMiles,
+  calculateTopUpMiles,
+  getTier,
+  type MilesLineItem,
+  type MilesResult,
+  type Tier,
+  type TierId,
+} from '@/lib/miles';
+import { qualifiesAsMemory, toMemoryCategory, type MemoryContext } from '@/lib/memory';
+import type { DemoProfile } from '@/data/demo-profiles';
+
+// ── Miles helpers ─────────────────────────────────────────────────────────────
+const DAY_MS = 86_400_000;
+
+/** Returns a YYYY-MM-DD string offset by `deltaDays` from `date`. */
+function shiftDate(date: string, deltaDays: number): string {
+  const d = new Date(date);
+  d.setDate(d.getDate() + deltaDays);
+  return d.toISOString().split('T')[0];
+}
+
+/** Whole days from `earlier` to `later` (negative if `later` precedes it). */
+function daysApart(earlier: string, later: string): number {
+  return Math.round((new Date(later).getTime() - new Date(earlier).getTime()) / DAY_MS);
+}
+
+export interface MilesHistoryEntry {
+  paymentId: string;
+  date: string;
+  milesEarned: number;
+  breakdown: MilesLineItem[];
+  timestamp: string;
+}
+
+export interface RecordMemoryResult {
+  /** Whether the payment is saved as a memory card. */
+  qualifies: boolean;
+  /** Miles awarded (0 if it didn't qualify). */
+  miles: MilesResult;
+  /** The new tier if this payment crossed a threshold, else null. */
+  tierUp: Tier | null;
+}
 
 // ===== Types =====
 export type Language = 'en' | 'zh' | 'ms' | 'ta';
@@ -72,6 +115,7 @@ interface AppState {
   setFrequentMerchant: (merchant: string) => void;
   simulatedTransactions: Transaction[];
   addTransaction: (txn: Transaction) => void;
+  updateTransaction: (id: string, patch: Partial<Transaction>) => void;
   notifications: Notification[];
   addNotification: (notif: Notification) => void;
   markNotificationsRead: () => void;
@@ -81,11 +125,29 @@ interface AppState {
   setLanguage: (lang: Language) => void;
   theme: Theme;
   setTheme: (theme: Theme) => void;
+
+  // ── NETS Miles (running totals + audit trail) ──
+  totalMiles: number;
+  lifetimeMiles: number;
+  currentTier: TierId;
+  milesHistory: MilesHistoryEntry[];
+  recordMemory: (ctx: MemoryContext) => RecordMemoryResult;
+  recordTopUp: (paymentId: string, date: string) => { miles: MilesResult; tierUp: Tier | null };
+  /** Reconcile with the DB-backed miles total (source of truth). Merges upward so
+   *  live mock activity in the session isn't lost. Returns the new tier if this
+   *  bump crossed a threshold. */
+  syncMilesFromServer: (serverTotal: number) => { tierUp: Tier | null };
+
+  // ── Demo switcher ──
+  /** The active demo persona (overrides transactions + personality), or null. */
+  activeDemoProfile: DemoProfile | null;
+  applyDemoProfile: (profile: DemoProfile) => void;
+  clearDemoProfile: () => void;
 }
 
 const useStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       hasOnboarded: false,
       setHasOnboarded: (val) => set({ hasOnboarded: val }),
       userName: 'Sree',
@@ -116,6 +178,12 @@ const useStore = create<AppState>()(
           notifications: newNotifs
         };
       }),
+      updateTransaction: (id, patch) =>
+        set((state) => ({
+          simulatedTransactions: state.simulatedTransactions.map((txn) =>
+            txn.id === id ? { ...txn, ...patch } : txn
+          ),
+        })),
       notifications: [],
       addNotification: (notif) => set((state) => ({ notifications: [notif, ...state.notifications] })),
       markNotificationsRead: () => set((state) => ({
@@ -123,6 +191,131 @@ const useStore = create<AppState>()(
       })),
       personality: defaultPersonality,
       setPersonality: (p) => set({ personality: p }),
+
+      // ── NETS Miles ──
+      totalMiles: 0,
+      lifetimeMiles: 0,
+      currentTier: 'explorer',
+      milesHistory: [],
+
+      recordMemory: (ctx) => {
+        const state = get();
+        const qualifies = qualifiesAsMemory(ctx);
+
+        // Signal: first payment in this category within the last 7 days of
+        // live activity (base seed data is excluded — it's static).
+        const isNewCategoryThisWeek = !state.simulatedTransactions.some((txn) => {
+          const diff = daysApart(txn.date, ctx.date);
+          if (diff < 0 || diff > 7) return false;
+          return toMemoryCategory(txn.category, txn.isOverseas) === ctx.category;
+        });
+
+        // Signal: 3rd+ consecutive day with a memory — awarded once per day.
+        const memoryDates = new Set(state.milesHistory.map((h) => h.date));
+        const firstMemoryToday = !memoryDates.has(ctx.date);
+        const isThirdConsecutiveDay =
+          qualifies &&
+          firstMemoryToday &&
+          memoryDates.has(shiftDate(ctx.date, -1)) &&
+          memoryDates.has(shiftDate(ctx.date, -2));
+
+        const miles = calculateMemoryMiles(ctx, {
+          isNewCategoryThisWeek,
+          isThirdConsecutiveDay,
+        });
+
+        const previousTier = getTier(state.totalMiles);
+        let tierUp: Tier | null = null;
+
+        if (miles.total > 0) {
+          const newTotal = state.totalMiles + miles.total;
+          const newTier = getTier(newTotal);
+          tierUp = newTier.id !== previousTier.id ? newTier : null;
+          set({
+            totalMiles: newTotal,
+            lifetimeMiles: state.lifetimeMiles + miles.total,
+            currentTier: newTier.id,
+            milesHistory: [
+              {
+                paymentId: ctx.paymentId,
+                date: ctx.date,
+                milesEarned: miles.total,
+                breakdown: miles.breakdown,
+                timestamp: new Date().toISOString(),
+              },
+              ...state.milesHistory,
+            ],
+          });
+        }
+
+        return { qualifies, miles, tierUp };
+      },
+
+      recordTopUp: (paymentId, date) => {
+        const state = get();
+        const miles = calculateTopUpMiles();
+        const previousTier = getTier(state.totalMiles);
+        const newTotal = state.totalMiles + miles.total;
+        const newTier = getTier(newTotal);
+        const tierUp = newTier.id !== previousTier.id ? newTier : null;
+        set({
+          totalMiles: newTotal,
+          lifetimeMiles: state.lifetimeMiles + miles.total,
+          currentTier: newTier.id,
+          milesHistory: [
+            {
+              paymentId,
+              date,
+              milesEarned: miles.total,
+              breakdown: miles.breakdown,
+              timestamp: new Date().toISOString(),
+            },
+            ...state.milesHistory,
+          ],
+        });
+        return { miles, tierUp };
+      },
+
+      activeDemoProfile: null,
+      applyDemoProfile: (profile) =>
+        set({
+          activeDemoProfile: profile,
+          simulatedTransactions: [], // demo profile replaces the whole ledger
+          userName: profile.name,
+          frequentMerchant: profile.frequentMerchant,
+          hasOnboarded: true,
+          personality: {
+            title: profile.personaTitle,
+            traits: profile.traits.map((label, i) => ({
+              label,
+              color: profile.traitColors?.[i] ?? (i === 0 ? '#C0001F' : i === 1 ? '#FF2D87' : '#0033A0'),
+            })),
+            story: profile.story,
+            isLoading: false,
+          },
+        }),
+      clearDemoProfile: () =>
+        set({
+          activeDemoProfile: null,
+          simulatedTransactions: [],
+          userName: 'Sree',
+          frequentMerchant: 'Maxwell Food Centre',
+          personality: defaultPersonality,
+        }),
+
+      syncMilesFromServer: (serverTotal) => {
+        const state = get();
+        const previousTier = getTier(state.totalMiles);
+        const newTotal = Math.max(state.totalMiles, serverTotal);
+        const newLifetime = Math.max(state.lifetimeMiles, serverTotal);
+        const newTier = getTier(newTotal);
+        const tierUp = newTier.id !== previousTier.id ? newTier : null;
+        if (newTotal !== state.totalMiles || newLifetime !== state.lifetimeMiles) {
+          set({ totalMiles: newTotal, lifetimeMiles: newLifetime, currentTier: newTier.id });
+        }
+        return { tierUp };
+      },
+
       language: 'en',
       setLanguage: (lang) => set({ language: lang }),
       theme: 'light',
@@ -224,7 +417,11 @@ export function useApp() {
     }
   }, [store.theme]);
 
-  const allTransactions = [...store.simulatedTransactions, ...baseTransactions];
+  // A demo persona replaces the entire ledger; otherwise live sims sit on top of
+  // the base seed data.
+  const allTransactions = store.activeDemoProfile
+    ? store.activeDemoProfile.transactions
+    : [...store.simulatedTransactions, ...baseTransactions];
 
   const refreshPersonality = useCallback(async () => {
     store.setPersonality({ ...store.personality, isLoading: true });
@@ -272,9 +469,21 @@ export function useApp() {
       store.addTransaction(txn);
       setTimeout(() => refreshPersonality(), 100);
     },
+    updateTransaction: store.updateTransaction,
     notifications: store.notifications,
     addNotification: store.addNotification,
     markNotificationsRead: store.markNotificationsRead,
+    // NETS Miles
+    totalMiles: store.totalMiles,
+    lifetimeMiles: store.lifetimeMiles,
+    currentTier: store.currentTier,
+    milesHistory: store.milesHistory,
+    recordMemory: store.recordMemory,
+    recordTopUp: store.recordTopUp,
+    syncMilesFromServer: store.syncMilesFromServer,
+    activeDemoProfile: store.activeDemoProfile,
+    applyDemoProfile: store.applyDemoProfile,
+    clearDemoProfile: store.clearDemoProfile,
     personality: store.personality,
     categories: computeCategories(allTransactions),
     peakTime: computePeakTime(allTransactions),

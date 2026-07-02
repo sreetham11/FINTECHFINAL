@@ -9,6 +9,7 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -44,20 +45,24 @@ export default function SignupPage() {
         return;
       }
 
-      // 2. Call register API to create Prisma user record
-      const registerRes = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: data.user.id,
-          email: data.user.email,
-          name: name || data.user.email?.split('@')[0] || 'User',
-        }),
-      });
-
-      if (!registerRes.ok) {
-        const errData = await registerRes.json();
-        console.error('Failed to register user in custom database:', errData);
+      // 2. If email confirmation is disabled, signUp returns a live session, so
+      //    we can create the local user record now. Otherwise the record is
+      //    created on first login / OAuth callback (both use the verified
+      //    session). The register endpoint takes identity from the session, so
+      //    we only send the display name.
+      if (data.session) {
+        try {
+          const registerRes = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+          });
+          if (!registerRes.ok) {
+            console.error('Failed to create local user record:', await registerRes.json().catch(() => ({})));
+          }
+        } catch (err) {
+          console.error('Failed to create local user record:', err);
+        }
       }
 
       setSuccess(true);
@@ -74,96 +79,100 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-height-100dvh flex flex-col justify-center items-center px-4 relative overflow-hidden" style={{ background: '#F7F4EF' }}>
-      {/* Background decoration */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full filter blur-[120px] opacity-40 animate-pulse" style={{ background: '#C0001F' }}></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full filter blur-[140px] opacity-35" style={{ background: '#E6A15C' }}></div>
+    <div className="auth-screen">
+      {/* Collage stickers behind the card */}
+      <div className="auth-blob" style={{ top: '10%', right: '9%', width: 74, height: 74, background: 'var(--nets-red)', transform: 'rotate(-14deg)' }} />
+      <div className="auth-blob" style={{ bottom: '12%', left: '8%', width: 96, height: 40, background: 'var(--dirty-yellow)', border: '3px solid var(--ink-black)', transform: 'rotate(7deg)' }} />
+      <div className="auth-blob" style={{ top: '18%', left: '13%', width: 0, height: 0, borderLeft: '24px solid transparent', borderRight: '24px solid transparent', borderBottom: '42px solid var(--nets-blue)', transform: 'rotate(-16deg)' }} />
 
-      <div className="w-full max-w-md bg-white border-[3px] border-[#1A1A1A] p-8 relative z-10 box-shadow-[8px_8px_0_0_#1A1A1A]">
-        <div className="text-center mb-8">
-          <div className="font-mono text-[0.75rem] uppercase tracking-[0.2em] text-[#C0001F] font-bold mb-2">
-            PolyFinTech100 Hackathon 2026
+      <div className="onb-layout">
+        {/* Desktop-only brand panel */}
+        <aside className="onb-hero">
+          <div className="onb-hero-brand"><span className="nets">NETS</span> <span className="quest">QUEST</span></div>
+          <div className="onb-hero-title">Start your<br />payment <span className="accent">era.</span></div>
+          <p className="onb-hero-sub">One wallet for splitting trips, saving memories and earning NETS Miles with your squad.</p>
+          <div className="onb-hero-list">
+            <div className="onb-hero-item"><span>🧾</span><span>Split bills &amp; trips instantly</span></div>
+            <div className="onb-hero-item"><span>✨</span><span>Every tap becomes a memory</span></div>
+            <div className="onb-hero-item"><span>🔒</span><span>256-bit encrypted · MAS regulated</span></div>
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-[#1A1A1A] font-outfit uppercase">
-            Create <span className="text-[#C0001F]">Account</span>
-          </h1>
-          <p className="text-[#555] font-space-mono text-xs mt-2">
-            Start your Gen Z payment companion journey.
-          </p>
+        </aside>
+
+      <div className="auth-card-wrap">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+          <span className="auth-stamp">New here</span>
+          <span className="auth-stamp" style={{ background: 'var(--nets-red)', color: '#fff', transform: 'rotate(4deg)' }}>Nets Quest</span>
         </div>
 
-        {error && (
-          <div className="bg-[#FFF0F2] border-2 border-[#C0001F] text-[#C0001F] p-3 font-mono text-xs mb-6 rounded-sm">
-            💥 {error}
+        <div className="auth-card" style={{ transform: 'rotate(1.5deg)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.16em', color: 'var(--nets-red)', textTransform: 'uppercase' }}>
+            Your payment era starts
           </div>
-        )}
+          <h1 className="auth-headline">Create<br /><span className="accent">Account</span></h1>
 
-        {success ? (
-          <div className="bg-[#E6FDF4] border-2 border-[#10B981] text-[#10B981] p-5 font-mono text-xs mb-6 text-center rounded-sm">
-            🎉 Account created successfully! <br/>
-            Check your email for confirmation, or redirecting you to log in...
+          {error && <div className="auth-error">💥 {error}</div>}
+
+          {success ? (
+            <div style={{ border: '2.5px solid var(--stamp-green, #00A86B)', color: 'var(--stamp-green, #00A86B)', padding: 18, fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textAlign: 'center', boxShadow: '3px 3px 0 0 var(--ink-black)' }}>
+              🎉 Account created!<br />Check your email to confirm, or hang tight — taking you to log in…
+            </div>
+          ) : (
+            <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label className="auth-label" htmlFor="su-name">Your name</label>
+                <input id="su-name" type="text" value={name} onChange={(e) => setName(e.target.value)} required className="auth-input" placeholder="e.g. Sree Kumar" />
+              </div>
+              <div>
+                <label className="auth-label" htmlFor="su-email">Email address</label>
+                <input id="su-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="auth-input" placeholder="you@domain.com" />
+              </div>
+              <div>
+                <label className="auth-label" htmlFor="su-password">Password</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="su-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="auth-input"
+                    style={{ paddingRight: 58 }}
+                    placeholder="Min 6 characters"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--nets-blue)', textTransform: 'uppercase' }}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" disabled={loading} className="auth-btn auth-btn-primary">
+                {loading ? 'Creating…' : 'Create Account →'}
+              </button>
+            </form>
+          )}
+
+          <p style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'color-mix(in srgb, var(--ink-black) 65%, transparent)', marginTop: 20 }}>
+            Already have an account?{' '}
+            <Link href="/auth/login" className="auth-link">Log in</Link>
+          </p>
+
+          <div style={{ marginTop: 18, borderTop: '2px dashed var(--ink-black)', paddingTop: 10 }}>
+            <div className="auth-barcode">
+              {[3,1,2,4,1,2,1,3,2,1,4,1,2,2,1,3,1,2,4,1,1,2,3,1,2,1,4,2,1,3].map((w, i) => (
+                <span key={i} style={{ width: w, height: 10 + (i % 4) * 4 }} />
+              ))}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--ink-black) 55%, transparent)', marginTop: 4 }}>
+              256-bit encrypted · MAS regulated
+            </div>
           </div>
-        ) : (
-          <form onSubmit={handleSignup} className="space-y-5">
-            <div>
-              <label className="block font-space-mono text-xs font-bold text-[#1A1A1A] uppercase tracking-wider mb-2">
-                Your Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full bg-[#F7F4EF] border-2 border-[#1A1A1A] px-4 py-3 font-space-mono text-sm text-[#1A1A1A] focus:outline-none focus:bg-white transition-colors"
-                placeholder="e.g. John Doe"
-              />
-            </div>
-
-            <div>
-              <label className="block font-space-mono text-xs font-bold text-[#1A1A1A] uppercase tracking-wider mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full bg-[#F7F4EF] border-2 border-[#1A1A1A] px-4 py-3 font-space-mono text-sm text-[#1A1A1A] focus:outline-none focus:bg-white transition-colors"
-                placeholder="e.g. user@domain.com"
-              />
-            </div>
-
-            <div>
-              <label className="block font-space-mono text-xs font-bold text-[#1A1A1A] uppercase tracking-wider mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full bg-[#F7F4EF] border-2 border-[#1A1A1A] px-4 py-3 font-space-mono text-sm text-[#1A1A1A] focus:outline-none focus:bg-white transition-colors"
-                placeholder="Minimum 6 characters"
-                minLength={6}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#C0001F] text-white border-2 border-[#1A1A1A] py-3.5 px-6 font-space-mono font-bold uppercase tracking-wider text-sm hover:bg-[#A00018] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[4px_4px_0_0_#1A1A1A] active:translate-x-[0px] active:translate-y-[0px] active:shadow-none transition-all duration-150 disabled:opacity-50"
-            >
-              {loading ? 'Creating Account...' : 'Sign Up'}
-            </button>
-          </form>
-        )}
-
-        <p className="text-center font-space-mono text-xs text-[#555] mt-8">
-          Already have an account?{' '}
-          <Link href="/auth/login" className="text-[#C0001F] font-bold underline hover:text-[#A00018]">
-            Log In
-          </Link>
-        </p>
+        </div>
+      </div>
       </div>
     </div>
   );

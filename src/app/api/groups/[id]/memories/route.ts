@@ -92,7 +92,7 @@ export async function GET(
         try {
           const { text } = await generateText({
             model: anthropic('claude-3-5-sonnet-20241022'),
-            maxTokens: 150,
+            maxOutputTokens: 150,
             messages: [
               {
                 role: 'user',

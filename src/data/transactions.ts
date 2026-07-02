@@ -17,6 +17,20 @@ export interface Transaction {
   memoryLine: string;
   isOverseas: boolean;
   isMemory?: boolean;
+
+  // ── Memory system (optional; populated for simulated payments) ──
+  /** Spend-context chip chosen on the post-payment sheet. */
+  spendContext?: import('@/lib/memory').SpendContext;
+  /** Optional short note the user typed. */
+  note?: string;
+  /** First visit to this merchant. */
+  isNewDiscovery?: boolean;
+  /** Total visits to this merchant, including this one. */
+  visitCount?: number;
+  /** Time-of-day bucket derived from the timestamp. */
+  timeOfDay?: import('@/lib/memory').TimeOfDay;
+  /** NETS Miles this specific payment earned. */
+  milesEarned?: number;
 }
 
 export const transactions: Transaction[] = [

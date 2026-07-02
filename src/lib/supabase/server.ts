@@ -1,12 +1,13 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
+import { requireServerEnv } from '@/lib/env';
 
 export function createSupabaseServerClient() {
   const cookieStore = cookies();
   return createServerClient(
-    process.env.SUPABASE_URL || 'https://placeholder.supabase.co',
-    process.env.SUPABASE_ANON_KEY || 'placeholder-key',
+    requireServerEnv('SUPABASE_URL', 'https://placeholder.supabase.co'),
+    requireServerEnv('SUPABASE_ANON_KEY', 'placeholder-key'),
     {
       cookies: {
         getAll() {
@@ -28,8 +29,8 @@ export function createSupabaseServerClient() {
 
 export function createSupabaseServiceClient() {
   return createClient(
-    process.env.SUPABASE_URL || 'https://placeholder.supabase.co',
-    process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key',
+    requireServerEnv('SUPABASE_URL', 'https://placeholder.supabase.co'),
+    requireServerEnv('SUPABASE_SERVICE_ROLE_KEY', 'placeholder-key'),
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }

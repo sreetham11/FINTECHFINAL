@@ -7,12 +7,14 @@ import Link from 'next/link';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, ZAxis } from 'recharts';
 import Typewriter from '@/components/Typewriter';
 import { useRouter } from 'next/navigation';
+import { getTier } from '@/lib/miles';
 
 export default function PersonalityPage() {
   const [isSharing, setIsSharing] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   
-  const { language } = useApp();
+  const { language, totalMiles, activeDemoProfile } = useApp();
+  const isLegend = getTier(totalMiles).id === 'legend';
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -22,12 +24,39 @@ export default function PersonalityPage() {
 
   // Fetch personality details & transactions
   useEffect(() => {
+    // Demo persona active → drive the whole card from Zustand, skip the DB.
+    if (activeDemoProfile) {
+      const p = activeDemoProfile;
+      setPersonalityData({
+        title: p.personaTitle,
+        traits: p.traits,
+        story: p.story,
+        tips: p.tips,
+        personality: p.personalityEnum,
+        mascot: p.mascot,
+        mascotName: p.mascotName,
+        tagline: p.tagline,
+        strength: p.strength,
+        lifestyle: p.lifestyle,
+      });
+      setTransactions(
+        p.transactions.map((t) => ({
+          ...t,
+          createdAt: `${t.date}T${(t.time && t.time.length === 5 ? t.time : '12:00')}:00`,
+        }))
+      );
+      setErrorMsg(null);
+      setLoading(false);
+      return;
+    }
+
     const loadData = async () => {
       try {
         // Load transactions first to get heatmap/stats
         const txRes = await fetch('/api/transactions');
         if (txRes.status === 401) {
-          router.push('/auth/login');
+          // Not signed in / backend not configured — fall through to locked state.
+          setLoading(false);
           return;
         }
         const txData = await txRes.json();
@@ -51,7 +80,7 @@ export default function PersonalityPage() {
     };
 
     loadData();
-  }, [router]);
+  }, [router, activeDemoProfile]);
 
   const handleReveal = async () => {
     setLoading(true);
@@ -85,7 +114,7 @@ export default function PersonalityPage() {
     });
 
     transactions.forEach(t => {
-      const d = new Date(t.createdAt);
+      const d = new Date(t.createdAt ?? `${t.date}T${t.time || '12:00'}:00`);
       const dayIdx = d.getDay();
       const hour = d.getHours();
       let timeIdx = 0;
@@ -108,14 +137,23 @@ export default function PersonalityPage() {
       count[t.category] = (count[t.category] ?? 0) + 1;
     });
     const colors: Record<string, string> = {
+      // DB-style capitalised categories
       Food: '#C0001F',
       Transport: '#0284C7',
       Shopping: '#E6A15C',
       Sightseeing: '#10B981',
-      Others: '#8B5CF6'
+      Others: '#8B5CF6',
+      // client/demo lowercase categories
+      hawker: '#C0001F',
+      cafe: '#F5C800',
+      transport: '#0033A0',
+      overseas: '#FF2D87',
+      restaurant: '#C0001F',
+      shopping: '#0033A0',
     };
+    const nice = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
     return Object.entries(count).map(([label, val]) => ({
-      label,
+      label: colors[label] && label === label.toLowerCase() ? nice(label) : label,
       percent: Math.round((val / (transactions.length || 1)) * 100),
       color: colors[label] || '#4B5563'
     }));
@@ -173,6 +211,15 @@ export default function PersonalityPage() {
     <div className="page-content min-height-100dvh py-8 px-4" style={{ background: '#F7F4EF', paddingTop: '90px', paddingBottom: '90px' }}>
       <div className="max-w-xl mx-auto space-y-6">
 
+        <div className="flex justify-end">
+          <Link
+            href="/personality/showcase"
+            className="font-space-mono text-[0.7rem] font-bold uppercase tracking-wider text-[#0033A0] underline hover:text-[#FF2D87]"
+          >
+            See example personalities →
+          </Link>
+        </div>
+
         <div ref={cardRef} className="personality-card bg-white border-[3px] border-[#1A1A1A] p-6 box-shadow-[6px_6px_0_0_#1A1A1A] space-y-6">
           
           {isLocked ? (
@@ -229,10 +276,51 @@ export default function PersonalityPage() {
                 </span>
               </div>
 
+              {/* Mascot badge (demo persona) */}
+              {personalityData.mascot && (
+                <div className="flex items-center gap-3 mt-2">
+                  <div
+                    className="flex-shrink-0 flex items-center justify-center"
+                    style={{ width: 56, height: 56, background: '#F7F4EF', border: '3px solid #1A1A1A', boxShadow: '3px 3px 0 0 #1A1A1A', fontSize: '2rem', transform: 'rotate(-4deg)' }}
+                  >
+                    {personalityData.mascot}
+                  </div>
+                  <div>
+                    <div className="font-space-mono text-[0.6rem] font-bold uppercase tracking-wider text-[#777]">
+                      Your mascot
+                    </div>
+                    <div className="font-outfit text-lg font-black uppercase text-[#1A1A1A] leading-none">
+                      {personalityData.mascotName}
+                    </div>
+                    {personalityData.lifestyle && (
+                      <div className="font-space-mono text-[0.6rem] text-[#555] mt-0.5">{personalityData.lifestyle}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Personality Card Header */}
               <div className="personality-title font-outfit text-3xl font-black uppercase text-[#1A1A1A] tracking-tight leading-none mt-2">
                 {renderTitle(personalityData.title)}
               </div>
+
+              {/* Tagline quote */}
+              {personalityData.tagline && (
+                <p className="font-space-mono text-xs italic text-[#333] leading-relaxed border-l-4 border-[#C0001F] pl-3">
+                  &ldquo;{personalityData.tagline}&rdquo;
+                </p>
+              )}
+
+              {/* Strength stars */}
+              {typeof personalityData.strength === 'number' && (
+                <div>
+                  <div className="font-space-mono text-[0.6rem] font-bold uppercase tracking-wider text-[#777] mb-1">Strength</div>
+                  <div style={{ fontSize: '1.1rem', letterSpacing: '2px' }}>
+                    <span style={{ color: '#F5C800', WebkitTextStroke: '0.5px #1A1A1A' }}>{'★'.repeat(personalityData.strength)}</span>
+                    <span style={{ color: '#D9D5CE' }}>{'★'.repeat(Math.max(0, 5 - personalityData.strength))}</span>
+                  </div>
+                </div>
+              )}
 
               {/* Red Accent Divider */}
               <div className="h-2 bg-[#C0001F] relative overflow-hidden">
@@ -328,6 +416,23 @@ export default function PersonalityPage() {
                 </div>
               </div>
 
+              {/* Actionable financial insights */}
+              {Array.isArray(personalityData.tips) && personalityData.tips.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <h3 className="font-space-mono text-xs font-black uppercase border-b-2 border-[#1A1A1A] pb-1.5 text-[#1A1A1A]">
+                    💡 Money Moves For You
+                  </h3>
+                  <ul className="space-y-1.5">
+                    {personalityData.tips.map((tip: string, i: number) => (
+                      <li key={i} className="flex gap-2 font-space-mono text-[0.7rem] leading-relaxed text-[#333]">
+                        <span className="text-[#C0001F] font-bold">→</span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Barcode Deco */}
               <div className="flex items-center gap-4 pt-4 border-t-2 border-[#1A1A1A] border-dashed">
                 <div className="flex flex-row items-end gap-[1.5px] flex-1">
@@ -344,18 +449,24 @@ export default function PersonalityPage() {
 
         </div>
 
-        {/* Share Button (Outside card for clean print) */}
+        {/* Share Button (Outside card for clean print) — unlocks at NETS Legend */}
         {!isLocked && (
-          <button
-            onClick={handleShare}
-            disabled={isSharing}
-            className="w-full bg-[#1A1A1A] text-white border-[3px] border-[#1A1A1A] py-3.5 px-6 font-space-mono font-bold uppercase tracking-wider text-xs hover:bg-[#C0001F] flex items-center justify-center gap-2.5 box-shadow-[4px_4px_0_0_#1A1A1A]"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M4 12v8h16v-8M12 3v12M8 7l4-4 4 4" />
-            </svg>
-            {isSharing ? 'Saving Card...' : 'Share / Download Card'}
-          </button>
+          (isLegend || activeDemoProfile) ? (
+            <button
+              onClick={handleShare}
+              disabled={isSharing}
+              className="w-full bg-[#1A1A1A] text-white border-[3px] border-[#1A1A1A] py-3.5 px-6 font-space-mono font-bold uppercase tracking-wider text-xs hover:bg-[#C0001F] flex items-center justify-center gap-2.5 box-shadow-[4px_4px_0_0_#1A1A1A]"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M4 12v8h16v-8M12 3v12M8 7l4-4 4 4" />
+              </svg>
+              {isSharing ? 'Saving Card...' : 'Share / Download Card'}
+            </button>
+          ) : (
+            <div className="w-full bg-[#F7F4EF] text-[#555] border-[3px] border-dashed border-[#1A1A1A] py-3.5 px-6 font-space-mono font-bold uppercase tracking-wider text-[0.65rem] text-center leading-relaxed">
+              🔒 Reach <span className="text-[#F5C800]" style={{ WebkitTextStroke: '0.4px #1A1A1A' }}>NETS Legend</span> (301 miles) to download your card as a PNG
+            </div>
+          )
         )}
 
       </div>
